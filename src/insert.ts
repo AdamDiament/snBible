@@ -9,9 +9,20 @@ const SIZE_FACTOR: Record<Settings['textSize'], number> = {
 
 type Size = { width: number; height: number };
 
+// sn-plugin-lib types insertText/getPageDisplaySize as Promise<Object> and doesn't export
+// APIResponse from its root, so describe the documented { success, result, error } shape here.
+type ApiResult<T> = {
+  success: boolean;
+  result?: T | null;
+  error?: { code: number; message: string } | null;
+};
+
 async function pageSize(): Promise<Size> {
-  const res = await PluginCommAPI.getPageDisplaySize();
-  if (res?.success && res.result?.width && res.result?.height) return res.result as Size;
+  const res = (await PluginCommAPI.getPageDisplaySize()) as ApiResult<Size> | null | undefined;
+  // insertText validates textRect as integers, so keep everything derived from this whole.
+  if (res?.success && res?.result?.width && res.result.height) {
+    return { width: Math.round(res.result.width), height: Math.round(res.result.height) };
+  }
   // Fall back to A5X/A6X2 portrait if the host can't tell us.
   return { width: 1404, height: 1872 };
 }
@@ -52,13 +63,14 @@ export async function insertPassage(text: string, s: Settings): Promise<InsertOu
     textEditable: 0,
   };
 
-  let res = await PluginNoteAPI.insertText(textBox);
+  const insert = async () => (await PluginNoteAPI.insertText(textBox)) as ApiResult<boolean> | null | undefined;
+  let res = await insert();
 
   // 1501 = write permission missing. Ask once, then retry.
   if (!res?.success && res?.error?.code === 1501) {
     const perm = 'plugin.permission.FILE:WRITE';
     const granted = await PluginManager.requestPermission(perm, 'snBible needs permission to add the passage to your note.');
-    if (granted === 1 || granted === 2) res = await PluginNoteAPI.insertText(textBox);
+    if (granted === 1 || granted === 2) res = await insert();
   }
 
   if (!res?.success || res.result !== true) {
