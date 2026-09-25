@@ -98,4 +98,4 @@ These can only be confirmed on a Supernote. Please report results in an issue.
 
 ## Licence
 
-The Berean Standard Bible text is in the public domain.
+The code is released under the [MIT License](LICENSE). The Berean Standard Bible text in `src/data/bsb.json` is in the public domain.

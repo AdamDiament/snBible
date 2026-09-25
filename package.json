@@ -40,5 +40,6 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Supernote plugin: insert Berean Standard Bible passages into notes"
+  "description": "Supernote plugin: insert Berean Standard Bible passages into notes",
+  "license": "MIT"
 }
