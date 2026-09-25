@@ -1,97 +1,62 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# snBible
 
-# Getting Started
+A Supernote plugin that inserts Berean Standard Bible passages into the current note as a text box.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+Tap the **snBible** button in a note's toolbar, then either pick **book → chapter → verses** (tap the first verse, then the last), or type a reference such as `genesis 1:1-5` and press **Go**. The preview shows exactly what will be inserted; adjust verse numbers, layout, reference position, size and placement, then tap **Insert into note**.
 
-## Step 1: Start Metro
+## Build and install
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+You need Node 18+, JDK 17 and the Android SDK, set up as in the [Supernote environment guide](https://docs.supernote.com/en/environment).
 
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+```bash
+cd snBible-source
+./setup.sh
 ```
 
-## Step 2: Build and run your app
+The script creates a sibling `snBible/` project from the official template (`@supernote-plugin/sn-plugin-template`, React Native 0.79.2), copies this source in, downloads `bsb.txt` from bereanbible.com into `src/data/bsb.json`, and runs `buildPlugin.sh`.
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+Copy `snBible/build/outputs/*.snplg` to **MyStyle** on the Supernote, then go to **Settings → Apps → Plugins → Add Plugin**.
 
-### Android
+On Windows, run the same steps by hand: create the project with the `npx @react-native-community/cli init snBible --template @supernote-plugin/sn-plugin-template --version 0.79.2` command, copy the files listed in `setup.sh`, run `node scripts/fetch-bsb.mjs`, then `.\buildPlugin.ps1`.
 
-```sh
-# Using npm
-npm run android
+## Reference formats the text box accepts
 
-# OR using Yarn
-yarn android
-```
+| Typed | Result |
+|---|---|
+| `genesis 1:1-5`, `Gen 1:1–5` | Genesis 1:1–5 |
+| `Jn 3:16`, `first john 1:9`, `I John 4:8` | single verses |
+| `Rom 8:38-9:2`, `Isa 52:13-53:12` | ranges across chapters |
+| `Ps 23`, `Gen 1-2` | whole chapters |
+| `John 3:16, 18-21` | several pieces of one chapter |
+| `Jude 3-5`, `Philemon 6` | verses in one-chapter books |
+| `John`, `1 cor` | opens that book's chapter list |
 
-### iOS
+Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all work. Ambiguous ones (`Jo`, `Ez`) ask you to type more.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## Where the text comes from
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+- **Offline (default):** `npm run fetch-bsb` converts [bereanbible.com/bsb.txt](https://bereanbible.com/bsb.txt) (one verse per line) into `src/data/bsb.json`, which is bundled into the plugin. No Wi-Fi needed on the device.
+- **Online fallback:** if you build without that step, chapters are downloaded on demand from the [Free Use Bible API](https://bible.helloao.org) (`/api/BSB/{BOOK}/{chapter}.json`); the plugin asks for internet permission the first time.
 
-```sh
-bundle install
-```
+The BSB is in the public domain.
 
-Then, and every time you update your native dependencies, run:
+## Files
 
-```sh
-bundle exec pod install
-```
+| File | Purpose |
+|---|---|
+| `index.js` | Initialises the plugin and registers the NOTE toolbar button |
+| `App.tsx` | The picker, search box and preview UI |
+| `src/books.ts` | 66 books, chapter counts, abbreviations |
+| `src/reference.ts` | Reference parser and label formatting |
+| `src/bibleSource.ts` | Offline bundle reader and online fallback |
+| `src/format.ts` | Turns verses into the text box string (options live here) |
+| `src/insert.ts` | Sizes and places the text box, calls `PluginNoteAPI.insertText` |
+| `scripts/fetch-bsb.mjs` | Downloads and converts the BSB text |
+| `PluginConfig.json` | Plugin name, ID, version and permissions |
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## Notes
 
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- Text boxes can only go into NOTE files (not PDFs/EPUBs), and always land on the main layer. Lasso the box afterwards to move or resize it.
+- The plugin asks for write permission only if the note refuses the insert without it.
+- Verses the BSB omits (e.g. Matthew 17:21) appear greyed out in the list and are skipped when inserting a range.
+- To release an update, raise `versionCode`/`versionName` in `PluginConfig.json` and keep `pluginID` unchanged.
