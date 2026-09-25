@@ -118,7 +118,7 @@ for (const b of BOOKS) {
   EXACT.set(normaliseBookKey(b.name), b);
   EXACT.set(b.id.toLowerCase(), b);
   EXACT.set(normaliseBookKey(b.short), b);
-  for (const a of b.aliases) EXACT.set(a, b);
+  for (const a of b.aliases) { EXACT.set(a, b); }
 }
 
 /**
@@ -128,11 +128,11 @@ for (const b of BOOKS) {
  */
 export function findBook(raw: string): Book | Book[] | null {
   const key = normaliseBookKey(raw);
-  if (!key) return null;
+  if (!key) { return null; }
   const exact = EXACT.get(key);
-  if (exact) return exact;
+  if (exact) { return exact; }
   const hits = BOOKS.filter(b => normaliseBookKey(b.name).startsWith(key));
-  if (hits.length === 1) return hits[0];
-  if (hits.length > 1) return hits;
+  if (hits.length === 1) { return hits[0]; }
+  if (hits.length > 1) { return hits; }
   return null;
 }

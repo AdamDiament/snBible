@@ -21,7 +21,6 @@ function getBundled(): BundledData | null {
   if (bundled === undefined) {
     try {
       // Lazy require so the ~4 MB JSON is only evaluated the first time it's needed.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const data = require('./data/bsb.json') as BundledData;
       bundled = data && Array.isArray(data.books) && data.books.length === 66 ? data : null;
     } catch {
@@ -42,7 +41,7 @@ export async function getChapter(book: Book, chapter: number): Promise<string[]>
   const data = getBundled();
   if (data) {
     const ch = data.books[book.index]?.[chapter - 1];
-    if (ch) return ch;
+    if (ch) { return ch; }
   }
   return fetchChapterOnline(book, chapter);
 }
@@ -54,7 +53,7 @@ export async function getVerseCount(book: Book, chapter: number): Promise<number
 let internetGranted = false;
 
 async function ensureInternet(): Promise<void> {
-  if (internetGranted) return;
+  if (internetGranted) { return; }
   const perm = 'plugin.permission.INTERNET';
   const status = await PluginManager.hasPermission(perm);
   if (status === 1) {
@@ -79,14 +78,14 @@ type ApiChapter = {
 async function fetchChapterOnline(book: Book, chapter: number): Promise<string[]> {
   const key = `${book.id}.${chapter}`;
   const cached = onlineCache.get(key);
-  if (cached) return cached;
+  if (cached) { return cached; }
 
   await ensureInternet();
   const url = `https://bible.helloao.org/api/BSB/${book.id}/${chapter}.json`;
   let json: ApiChapter;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) { throw new Error(`HTTP ${res.status}`); }
     json = (await res.json()) as ApiChapter;
   } catch (e) {
     throw new Error(`Couldn't download ${book.name} ${chapter}. Check the Wi-Fi connection. (${String((e as Error)?.message ?? e)})`);
@@ -94,18 +93,18 @@ async function fetchChapterOnline(book: Book, chapter: number): Promise<string[]
 
   const verses: string[] = [];
   for (const block of json.chapter.content) {
-    if (block.type !== 'verse' || !block.number) continue;
+    if (block.type !== 'verse' || !block.number) { continue; }
     const pieces: string[] = [];
     for (const c of block.content ?? []) {
-      if (typeof c === 'string') pieces.push(c);
-      else if (c && typeof c.text === 'string') pieces.push(c.text);
+      if (typeof c === 'string') { pieces.push(c); }
+      else if (c && typeof c.text === 'string') { pieces.push(c.text); }
       // noteId (footnote markers) and lineBreak are dropped
     }
     const prev = verses[block.number - 1];
     const text = tidy(pieces.join(' '));
     verses[block.number - 1] = prev ? `${prev} ${text}` : text;
   }
-  for (let i = 0; i < verses.length; i++) if (verses[i] === undefined) verses[i] = '';
+  for (let i = 0; i < verses.length; i++) { if (verses[i] === undefined) { verses[i] = ''; } }
 
   onlineCache.set(key, verses);
   return verses;
@@ -131,10 +130,10 @@ export async function resolveSpans(spans: Span[]): Promise<VerseRow[]> {
       }
       for (let v = from; v <= to; v++) {
         const key = `${ch}:${v}`;
-        if (seen.has(key)) continue;
+        if (seen.has(key)) { continue; }
         seen.add(key);
         const text = verses[v - 1];
-        if (text) out.push({ chapter: ch, verse: v, text });
+        if (text) { out.push({ chapter: ch, verse: v, text }); }
       }
     }
   }

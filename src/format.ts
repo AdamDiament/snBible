@@ -36,7 +36,7 @@ const SUP: Record<string, string> = {
 const sup = (s: string) => s.split('').map(c => SUP[c] ?? c).join('');
 
 function marker(row: VerseRow, showChapter: boolean, style: Settings['verseNumbers']): string {
-  if (style === 'off') return '';
+  if (style === 'off') { return ''; }
   const n = showChapter ? `${row.chapter}:${row.verse}` : `${row.verse}`;
   return style === 'superscript' ? sup(n) : `${n} `;
 }
@@ -56,7 +56,7 @@ export function buildText(rows: VerseRow[], label: string, s: Settings): string 
   const body = s.layout === 'lines' ? pieces.join('\n') : pieces.join(' ');
   const ref = s.includeTranslation ? `${label} (BSB)` : label;
 
-  if (s.reference === 'top') return `${ref}\n${body}`;
-  if (s.reference === 'bottom') return `${body}\n— ${ref}`;
+  if (s.reference === 'top') { return `${ref}\n${body}`; }
+  if (s.reference === 'bottom') { return `${body}\n— ${ref}`; }
   return body;
 }

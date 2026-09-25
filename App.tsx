@@ -45,8 +45,8 @@ function App(): React.JSX.Element {
   const openBook = (b: Book) => {
     setBook(b);
     setError(null);
-    if (b.chapters === 1) openChapter(b, 1);
-    else setScreen('chapters');
+    if (b.chapters === 1) { openChapter(b, 1); }
+    else { setScreen('chapters'); }
   };
 
   const openChapter = useCallback(async (b: Book, ch: number) => {
@@ -69,7 +69,7 @@ function App(): React.JSX.Element {
     setError(null);
     try {
       const resolved = await resolveSpans(spans);
-      if (!resolved.length) throw new Error('No verse text found for that reference.');
+      if (!resolved.length) { throw new Error('No verse text found for that reference.'); }
       setPreviewSpans(spans);
       setRows(resolved);
       setScreen('preview');
@@ -82,7 +82,7 @@ function App(): React.JSX.Element {
 
   const goFromQuery = async () => {
     const q = query.trim();
-    if (!q) return;
+    if (!q) { return; }
     // A bare book name ("John", "1 cor") jumps to its chapter list.
     if (!/\d\s*$/.test(q)) {
       const b = findBook(q);
@@ -126,7 +126,7 @@ function App(): React.JSX.Element {
   };
 
   const selection: Span | null = useMemo(() => {
-    if (!book || selStart === null) return null;
+    if (!book || selStart === null) { return null; }
     return { book, startChapter: chapter, startVerse: selStart, endChapter: chapter, endVerse: selEnd ?? selStart };
   }, [book, chapter, selStart, selEnd]);
 
@@ -148,8 +148,8 @@ function App(): React.JSX.Element {
       // Leave the picker on the same chapter for the next insertion.
       setSelStart(null);
       setSelEnd(null);
-      if (book) setScreen('verses');
-      else setScreen('books');
+      if (book) { setScreen('verses'); }
+      else { setScreen('books'); }
       await closePanel();
     } catch (e) {
       setError((e as Error).message);
@@ -159,7 +159,7 @@ function App(): React.JSX.Element {
   };
 
   useEffect(() => {
-    if (!notice) return;
+    if (!notice) { return; }
     const t = setTimeout(() => setNotice(null), 4000);
     return () => clearTimeout(t);
   }, [notice]);
@@ -168,9 +168,9 @@ function App(): React.JSX.Element {
 
   const back = () => {
     setError(null);
-    if (screen === 'preview') setScreen(book && verses ? 'verses' : 'books');
-    else if (screen === 'verses') setScreen(book && book.chapters > 1 ? 'chapters' : 'books');
-    else if (screen === 'chapters') setScreen('books');
+    if (screen === 'preview') { setScreen(book && verses ? 'verses' : 'books'); }
+    else if (screen === 'verses') { setScreen(book && book.chapters > 1 ? 'chapters' : 'books'); }
+    else if (screen === 'chapters') { setScreen('books'); }
   };
 
   return (
@@ -302,7 +302,7 @@ function BooksScreen({ onPick }: { onPick: (b: Book) => void }) {
 
 function Cell({ label, onPress, width }: { label: string; onPress: () => void; width: `${number}%` }) {
   return (
-    <View style={{ width, padding: 5 }}>
+    <View style={[st.cellWrap, { width }]}>
       <Pressable onPress={onPress} style={st.cell}>
         <Text style={st.cellText} numberOfLines={1} adjustsFontSizeToFit>
           {label}
@@ -550,6 +550,7 @@ const st = StyleSheet.create({
   hint: { fontSize: T.small, color: C.grey, marginTop: 6, marginBottom: 14 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 18 },
+  cellWrap: { padding: 5 },
   cell: {
     minHeight: 64,
     borderWidth: 2,

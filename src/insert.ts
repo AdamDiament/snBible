@@ -49,7 +49,7 @@ export async function insertPassage(text: string, s: Settings): Promise<InsertOu
   const height = Math.min(wanted, maxHeight);
 
   let top = s.placement === 'middle' ? Math.round((page.height - height) / 2) : Math.round(page.height * 0.08);
-  if (top + height > page.height - margin) top = Math.max(margin, page.height - margin - height);
+  if (top + height > page.height - margin) { top = Math.max(margin, page.height - margin - height); }
 
   const textBox = {
     textContentFull: text,
@@ -70,7 +70,7 @@ export async function insertPassage(text: string, s: Settings): Promise<InsertOu
   if (!res?.success && res?.error?.code === 1501) {
     const perm = 'plugin.permission.FILE:WRITE';
     const granted = await PluginManager.requestPermission(perm, 'snBible needs permission to add the passage to your note.');
-    if (granted === 1 || granted === 2) res = await insert();
+    if (granted === 1 || granted === 2) { res = await insert(); }
   }
 
   if (!res?.success || res.result !== true) {

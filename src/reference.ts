@@ -30,14 +30,14 @@ export function parseReference(input: string): ParseResult {
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (!text) return { ok: false, error: 'Type a reference, for example John 3:16-18.' };
+  if (!text) { return { ok: false, error: 'Type a reference, for example John 3:16-18.' }; }
 
   // Book part = optional leading 1-3 / roman / "first" etc, then letters/spaces.
   const m = text.match(/^((?:[1-3]|i{1,3}|first|second|third|1st|2nd|3rd)?\s*[A-Za-z][A-Za-z .]*?)\s*(\d[\d:,;\- ]*)?$/i);
-  if (!m) return { ok: false, error: `Couldn't read "${input}". Try a form like Genesis 1:1-5.` };
+  if (!m) { return { ok: false, error: `Couldn't read "${input}". Try a form like Genesis 1:1-5.` }; }
 
   const found = findBook(m[1]);
-  if (!found) return { ok: false, error: `No book called "${m[1].trim()}".` };
+  if (!found) { return { ok: false, error: `No book called "${m[1].trim()}".` }; }
   if (Array.isArray(found)) {
     return { ok: false, error: `"${m[1].trim()}" could be ${found.map(b => b.name).join(', ')}. Type more of the name.` };
   }
@@ -58,7 +58,7 @@ export function parseReference(input: string): ParseResult {
     }
     const a = parsePoint(parts[0]);
     const b = parts[1] !== undefined ? parsePoint(parts[1]) : null;
-    if (!a || (parts[1] !== undefined && !b)) return { ok: false, error: `Couldn't read "${seg}".` };
+    if (!a || (parts[1] !== undefined && !b)) { return { ok: false, error: `Couldn't read "${seg}".` }; }
 
     let span: Span;
     if (a.verse !== null) {
@@ -87,17 +87,17 @@ export function parseReference(input: string): ParseResult {
     }
 
     const err = validateSpan(span);
-    if (err) return { ok: false, error: err };
+    if (err) { return { ok: false, error: err }; }
     spans.push(span);
   }
 
-  if (!spans.length) return { ok: false, error: `Couldn't read "${input}".` };
+  if (!spans.length) { return { ok: false, error: `Couldn't read "${input}".` }; }
   return { ok: true, spans };
 }
 
 function parsePoint(s: string): { chapter: number; verse: number | null } | null {
   const m = s.match(/^(\d{1,3})(?::(\d{1,3}))?$/);
-  if (!m) return null;
+  if (!m) { return null; }
   return { chapter: Number(m[1]), verse: m[2] !== undefined ? Number(m[2]) : null };
 }
 
@@ -108,16 +108,16 @@ function validateSpan(s: Span): string | null {
       return `${book.name} has ${book.chapters} chapter${book.chapters === 1 ? '' : 's'}.`;
     }
   }
-  if (s.startVerse === 0 || s.endVerse === 0) return 'Verse numbers start at 1.';
+  if (s.startVerse === 0 || s.endVerse === 0) { return 'Verse numbers start at 1.'; }
   const startKey = s.startChapter * 1000 + (s.startVerse ?? 0);
   const endKey = s.endChapter * 1000 + (s.endVerse ?? 999);
-  if (endKey < startKey) return 'The end of the range comes before the start.';
+  if (endKey < startKey) { return 'The end of the range comes before the start.'; }
   return null;
 }
 
 /** Human label, e.g. "Genesis 1:1–5", "Romans 8:38–9:2", "Psalm 23", "John 3:16, 18–21". */
 export function formatSpans(spans: Span[]): string {
-  if (!spans.length) return '';
+  if (!spans.length) { return ''; }
   const book = spans[0].book;
   const name = displayName(book, spans);
   const parts: string[] = [];
