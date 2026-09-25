@@ -14,16 +14,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # Not used today (snBible has no native code, so buildPlugin.sh skips Gradle),
       # but buildPlugin.sh runs Gradle as soon as a native dependency is added.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
@@ -34,7 +34,7 @@ jobs:
       - run: npm test -- --ci
       - run: ./buildPlugin.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: snBible-snplg
           path: build/outputs/*.snplg
@@ -42,7 +42,7 @@ jobs:
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/outputs/*.snplg
           # Tags containing a hyphen (v1.0.0-rc.1) are published as pre-releases.
