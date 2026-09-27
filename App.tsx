@@ -5,6 +5,7 @@ import { BOOKS, Book, findBook } from './src/books';
 import { formatSpans, parseReference, Span } from './src/reference';
 import { getChapter, hasOfflineText, resolveSpans, VerseRow } from './src/bibleSource';
 import { buildText, getSettings, setSettings, Settings } from './src/format';
+import { FRAME_TEST_DEFAULT, FrameTest, frameTestLabel } from './src/frameTest';
 import { closePanel, insertPassage, pageSize } from './src/insert';
 import { DEFAULT_PAGE, layoutTextBox, Size } from './src/layout';
 import { MAX_VERSES, Selection, selectionRange, selectionStatus, tapVerse } from './src/selection';
@@ -28,6 +29,9 @@ function App(): React.JSX.Element {
   const [rows, setRows] = useState<VerseRow[]>([]);
   const [settings, setLocalSettings] = useState<Settings>(getSettings());
   const [page, setPage] = useState<Size | null>(null);
+  // TEMPORARY frame experiment (src/frameTest.ts): null when off.
+  const [frameTest, setFrameTest] = useState<FrameTest | null>(null);
+  const testSlot = useRef(0);
 
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -173,7 +177,9 @@ function App(): React.JSX.Element {
     setError(null);
     let inserted = false;
     try {
-      const res = await insertPassage(output, settings);
+      const res = frameTest
+        ? await insertPassage(`${frameTestLabel(frameTest)}\n${output}`, settings, { frame: frameTest, slot: testSlot.current++ })
+        : await insertPassage(output, settings);
       if (res.ok) { inserted = true; }
       else { setError(res.error); }
     } catch (e) {
@@ -281,6 +287,11 @@ function App(): React.JSX.Element {
             output={output}
             verseCount={rows.length}
             overflow={overflow}
+            frameTest={frameTest}
+            onFrameTest={t => {
+              testSlot.current = 0;
+              setFrameTest(t);
+            }}
             settings={settings}
             onChange={updateSettings}
             onInsert={doInsert}
@@ -440,6 +451,8 @@ function PreviewScreen(props: {
   output: string;
   verseCount: number;
   overflow: boolean;
+  frameTest: FrameTest | null;
+  onFrameTest: (t: FrameTest | null) => void;
   settings: Settings;
   onChange: (p: Partial<Settings>) => void;
   onInsert: () => void;
@@ -518,17 +531,65 @@ function PreviewScreen(props: {
           <Toggle label="Add (BSB)" value={s.includeTranslation} onChange={v => onChange({ includeTranslation: v })} />
           <Toggle label="Bold" value={s.bold} onChange={v => onChange({ bold: v })} />
           <Toggle label="Border" value={s.border} onChange={v => onChange({ border: v })} />
-          <Toggle label="White background (test)" value={s.background} onChange={v => onChange({ background: v })} />
         </View>
         <Text style={st.hint}>
           After inserting, lasso the text box to move or resize it. Text boxes go on the main layer.
         </Text>
+        <FrameTestPanel value={props.frameTest} onChange={props.onFrameTest} />
       </SafeScrollView>
 
       <View style={st.bottomBar}>
         <View style={st.flex} />
         <Button label={props.busy ? 'Inserting…' : 'Insert into note'} kind="primary" onPress={props.onInsert} disabled={props.busy} style={st.insertBtn} />
       </View>
+    </View>
+  );
+}
+
+// TEMPORARY: see src/frameTest.ts. Each test insert is labelled and placed below the last.
+function FrameTestPanel({ value: t, onChange }: { value: FrameTest | null; onChange: (t: FrameTest | null) => void }) {
+  return (
+    <View>
+      <Text style={st.section}>Frame test (temporary)</Text>
+      <Toggle label="Use frame test for inserts" value={t !== null} onChange={on => onChange(on ? FRAME_TEST_DEFAULT : null)} />
+      {t ? (
+        <>
+          <Choice
+            label="Frame mode (textFrameStyle)"
+            value={t.mode}
+            onChange={mode => onChange({ ...t, mode })}
+            options={[
+              ['0', '0'],
+              ['1', '1'],
+              ['2', '2'],
+              ['3', '3'],
+            ]}
+          />
+          <Choice
+            label="Fill colour (0 black … 255 white)"
+            value={t.fill}
+            onChange={fill => onChange({ ...t, fill })}
+            options={[
+              ['none', 'None'],
+              ['255', '255'],
+              ['200', '200'],
+              ['128', '128'],
+              ['0', '0'],
+            ]}
+          />
+          <Choice
+            label="Text colour"
+            value={t.text}
+            onChange={text => onChange({ ...t, text })}
+            options={[
+              ['default', 'Default'],
+              ['white255', 'White 255'],
+              ['whiteArgb', 'White ARGB'],
+            ]}
+          />
+          <Text style={st.hint}>Each insert starts with a line naming these settings and goes below the previous one.</Text>
+        </>
+      ) : null}
     </View>
   );
 }

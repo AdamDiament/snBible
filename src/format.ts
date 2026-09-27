@@ -8,7 +8,6 @@ export type Settings = {
   textSize: 'small' | 'medium' | 'large';
   bold: boolean;
   border: boolean;
-  background: boolean; // white fill behind the text (experimental, see layout.ts textFrame)
   placement: 'top' | 'middle';
 };
 
@@ -20,7 +19,6 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: 'medium',
   bold: false,
   border: false,
-  background: false,
   placement: 'top',
 };
 

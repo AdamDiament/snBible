@@ -1,5 +1,6 @@
 import { PluginCommAPI, PluginManager, PluginNoteAPI } from 'sn-plugin-lib';
 import type { Settings } from './format';
+import { FrameTest, frameTestFields, stackBox } from './frameTest';
 import { DEFAULT_PAGE, layoutTextBox, Size, textFrame } from './layout';
 
 // sn-plugin-lib types insertText/getPageDisplaySize as Promise<Object> and doesn't export
@@ -25,8 +26,14 @@ export async function pageSize(): Promise<Size> {
 
 export type InsertOutcome = { ok: true } | { ok: false; error: string };
 
-export async function insertPassage(text: string, s: Settings): Promise<InsertOutcome> {
-  const { textRect, fontSize } = layoutTextBox(text, await pageSize(), s);
+/** `test` (temporary): frame experiment fields, and which slot down the page to use. */
+export async function insertPassage(text: string, s: Settings, test?: { frame: FrameTest; slot: number }): Promise<InsertOutcome> {
+  const page = await pageSize();
+  let layout = layoutTextBox(text, page, s);
+  if (test) {
+    layout = stackBox(layout, page, test.slot);
+  }
+  const { textRect, fontSize } = layout;
 
   const textBox = {
     textContentFull: text,
@@ -36,7 +43,7 @@ export async function insertPassage(text: string, s: Settings): Promise<InsertOu
     textBold: s.bold ? 1 : 0,
     textItalics: 0,
     textFrameWidthType: 0, // fixed width, so the passage wraps inside the page margins
-    ...textFrame(s),
+    ...(test ? frameTestFields(test.frame) : textFrame(s)),
     textEditable: 0,
   };
 
