@@ -5,8 +5,8 @@
   "iconPath": "assets/icon/icon.png",
   "desc": "Insert Berean Standard Bible verses into your note as a text box. Pick book, chapter and verses, or type a reference like Genesis 1:1-5.",
   "author": "Adam",
-  "versionCode": "2",
-  "versionName": "1.1.0",
+  "versionCode": "3",
+  "versionName": "1.2.0",
   "jsMainPath": "index",
   "uses-permissions": ["plugin.permission.FILE:WRITE", "plugin.permission.INTERNET"]
 }

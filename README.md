@@ -2,7 +2,14 @@
 
 A Supernote plugin that inserts Berean Standard Bible passages into the current note as a text box.
 
-Tap the **Super Bible** button in a note's toolbar, then either pick **book → chapter → verses** (tap the first and last verse, in either order), or type a reference such as `genesis 1:1-5` and press **Go**. Up to 30 verses can be inserted at a time. The preview shows exactly what will be inserted; adjust verse numbers, layout, reference position, size and placement, then tap **Insert into note**.
+Tap the **Super Bible** button in a note's toolbar, then either pick **book → chapter → verses** (tap the first and last verse, in either order), or type a reference such as `genesis 1:1-5` and press **Go**. Up to 30 verses can be inserted at a time. By default the passage goes just below the last thing you wrote on the page.
+
+**From the lasso toolbar** (the Super Bible button appears when you lasso handwriting or a text box):
+
+- **Lasso a handwritten reference** such as "Rom 8:28": it's read with handwriting recognition, and the passage is inserted where you wrote it, replacing the handwriting (untick *Replace handwriting* to keep it). If the reference can't be read, what was recognised is put in the search box for you to correct.
+- **Lasso a Super Bible text box** to change it: the reference is read from the box, you can pick a different range or change the layout, and *Update text box* rewrites it in place.
+
+Your settings and your last six passages (shown under **Recent** on the book grid) are remembered. The preview shows exactly what will be inserted; adjust verse numbers, layout, reference position, size and placement, then tap **Insert into note**.
 
 ## Build and install
 
@@ -60,6 +67,10 @@ Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all wor
 | `src/reference.ts` | Reference parser and label formatting |
 | `src/bibleSource.ts` | Offline bundle reader and online fallback |
 | `src/format.ts` | Turns verses into the text box string (options live here) |
+| `src/buttons.ts` | Toolbar and lasso button ids; hands button presses to App |
+| `src/lasso.ts` | Reads the lasso: recognises handwriting, or finds the reference in a text box |
+| `src/pageContent.ts` | Finds the bottom of the last thing written on the page |
+| `src/store.ts` | Remembers settings and recent passages |
 | `src/selection.ts` | Verse-list selection (either order) and the 30-verse limit |
 | `src/layout.ts` | Text box size and position, and the one-page fit estimate |
 | `src/insert.ts` | Calls `PluginNoteAPI.insertText` and closes the panel |
@@ -78,6 +89,8 @@ Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all wor
 - Verses the BSB omits (e.g. Matthew 17:21) appear greyed out in the list and are skipped when inserting a range.
 - **Layouts:** Paragraph, One per line, or Spaced list (a blank line between verses, like the verse picker).
 - **No borders or backgrounds yet.** Tested on device: the documented border value (`textFrameStyle` 3) and the SDK's internal fill/stroke values (0–2 with `textFrameFillColor`/`textColor`) all drew nothing. It's a question for Supernote whether plugins can set text box frames and colours.
+- **How settings are remembered.** sn-plugin-lib can't write file contents (FileUtils can only make, list, rename and delete) and has no key-value store, and AsyncStorage would mean shipping native code. So each setting and recent passage is stored as the name of an empty directory in the plugin's own folder (`superbible-state/s.layout=spaced`, `r.0=John%203%3A16`), read back by listing it. If that fails, settings last as long as the plugin process, as before. Reinstalling the plugin may reset them.
+- **Below my writing** uses the last element added to the page (`getLastElement`), which is the lowest one when you write top to bottom. If you added something higher up most recently, the passage goes under that instead. Reading every element on the page to find the true bottom would be slow on busy pages.
 - **Limit: 30 verses per insert.** That's about one full page at Small text (roughly 22 at Medium and 14 at Large), and it covers 69% of whole chapters. The preview warns before inserting if the passage won't fit on one page at the chosen size.
 - **Tap freeze (fixed in 1.1.0).** The host keeps the plugin mounted while it's hidden. RN's ScrollView ignores taps on its children while it thinks a fling is still running or the keyboard is open, and hiding the plugin mid-scroll could leave it thinking that for good. Grids then stopped responding while buttons outside them still worked. `SafeScrollView` always passes taps through to buttons, remounts if a fling never finishes, and remounts every time the plugin is shown again.
 - To release an update, raise `versionCode`/`versionName` in `PluginConfig.json` (and `version` in `package.json`), and keep `pluginID` unchanged.
@@ -104,6 +117,13 @@ These can only be confirmed on a Supernote. Please report results in an issue.
 - [ ] The UI is readable on e-ink: no ghosting, and tap targets are big enough. There are deliberately no spinners or animations.
 - [ ] The text box can be lassoed and moved after inserting.
 - [ ] Spaced list inserts with a blank line between verses.
+- [ ] Below my writing: the passage lands just under your last writing (try after handwriting, and after a previous passage); the preview warns when the page is too full.
+- [ ] Lasso button appears for lassoed handwriting and for a lassoed text box (and not for images/links).
+- [ ] Handwritten references are recognised: try `Rom 8:28`, `Jn 3:16-18`, `1 Cor 13:4-7`, `Ps 23`. With *Replace handwriting* on, the handwriting disappears and the passage appears in its place.
+- [ ] If an insert fails after the handwriting was removed, Undo in the note brings the handwriting back.
+- [ ] Lassoing a Super Bible text box, changing the range and tapping *Update text box* rewrites that box in place.
+- [ ] Settings and Recent passages survive a device restart.
+- [ ] The preview box stays about a third of the screen tall, with the options visible below it.
 - [ ] The button does not appear in DOC/PDF (it is registered for NOTE only).
 
 ## Licence
