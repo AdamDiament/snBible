@@ -1,4 +1,4 @@
-import { PluginFileAPI, PointUtils } from 'sn-plugin-lib';
+import { PluginCommAPI, PluginFileAPI, PointUtils } from 'sn-plugin-lib';
 import type { Size } from './layout';
 
 type Pt = { x: number; y: number };
@@ -7,6 +7,7 @@ type Accessor<T> = { size(): Promise<number>; getRange(start: number, count: num
 /** The parts of an sn-plugin-lib Element this module reads. */
 export type ElementLike = {
   type: number;
+  numInPage?: number;
   stroke?: { points?: Accessor<Pt> } | null;
   textBox?: { textRect?: { bottom: number } } | null;
   geometry?: { points?: Pt[] } | null;
@@ -46,12 +47,49 @@ export async function elementBottom(el: ElementLike, emrToPx: (p: Pt) => Pt): Pr
   return Math.max(...emr.map(p => emrToPx(p).y));
 }
 
-/** Bottom edge (page px) of the last thing written on the current page, or null for an empty page. */
+/** The most recently added of the page's live elements (numInPage counts up as things are added). */
+export function latestElement<T extends { numInPage?: number }>(elements: T[]): T | null {
+  let best: T | null = null;
+  for (const el of elements) {
+    if (!best || (el.numInPage ?? 0) >= (best.numInPage ?? 0)) {
+      best = el;
+    }
+  }
+  return best;
+}
+
+type Result<T> = { success?: boolean; result?: T | null } | null | undefined;
+
+/**
+ * The page's current elements. getLastElement isn't used for this: on device it still
+ * returned strokes that had been erased or deleted, while getElements lists what's on the page now.
+ * Returns null (not []) if the list can't be read, so the caller can fall back.
+ */
+async function liveElements(): Promise<ElementLike[] | null> {
+  const [file, pageNum] = await Promise.all([
+    PluginCommAPI.getCurrentFilePath() as Promise<Result<string>>,
+    PluginCommAPI.getCurrentPageNum() as Promise<Result<number>>,
+  ]);
+  if (!file?.success || !file.result || !pageNum?.success || typeof pageNum.result !== 'number') {
+    return null;
+  }
+  const res = (await PluginFileAPI.getElements(pageNum.result, file.result)) as Result<ElementLike[]>;
+  return res?.success && Array.isArray(res.result) ? res.result : null;
+}
+
+/** Bottom edge (page px) of the most recent thing still on the current page, or null for an empty page. */
 export async function lastWritingBottom(page: Size): Promise<number | null> {
-  let el: ElementLike | null = null;
+  let elements: ElementLike[] = [];
   try {
-    const res = (await PluginFileAPI.getLastElement()) as { success?: boolean; result?: ElementLike | null } | null;
-    el = res?.success ? res.result ?? null : null;
+    const live = await liveElements().catch(() => null);
+    if (live) {
+      elements = live;
+    } else {
+      // Older hosts: fall back to getLastElement, which may include erased items.
+      const res = (await PluginFileAPI.getLastElement()) as Result<ElementLike>;
+      elements = res?.success && res.result ? [res.result] : [];
+    }
+    const el = latestElement(elements);
     if (!el) {
       return null;
     }
@@ -60,6 +98,8 @@ export async function lastWritingBottom(page: Size): Promise<number | null> {
   } catch {
     return null;
   } finally {
-    el?.recycle?.().catch(() => {});
+    for (const el of elements) {
+      el.recycle?.().catch(() => {});
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { elementBottom, ElementLike } from '../src/pageContent';
+import { elementBottom, ElementLike, latestElement } from '../src/pageContent';
 
 jest.mock('sn-plugin-lib', () => ({ PluginFileAPI: {}, PointUtils: {} }));
 
@@ -30,5 +30,12 @@ describe('elementBottom', () => {
   test('null when there is nothing to measure', async () => {
     await expect(elementBottom({ type: 0, stroke: { points: accessor([]) } }, emrToPx)).resolves.toBeNull();
     await expect(elementBottom({ type: 800 }, emrToPx)).resolves.toBeNull();
+  });
+});
+
+describe('latestElement', () => {
+  test('picks the highest numInPage, whatever the list order', () => {
+    expect(latestElement([{ numInPage: 3 }, { numInPage: 7 }, { numInPage: 5 }])).toEqual({ numInPage: 7 });
+    expect(latestElement([])).toBeNull();
   });
 });

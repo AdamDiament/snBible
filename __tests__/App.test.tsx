@@ -13,6 +13,8 @@ const mockHost = {
   recognized: '',
   lassoRect: { left: 100, top: 900, right: 700, bottom: 980 },
   lastElement: null as unknown,
+  // The page's live elements; null makes getElements fail so the getLastElement fallback is used.
+  pageElements: null as unknown[] | null,
 };
 const mockClose = jest.fn(() => new Promise<boolean>(() => {})); // never settles, like a hidden host view
 const mockInsertText = jest.fn(async (_box: unknown) => ({ success: true, result: true }));
@@ -38,12 +40,17 @@ jest.mock('sn-plugin-lib', () => {
       recognizeElements: async () => ({ success: true, result: mockHost.recognized }),
       getLassoRect: async () => ({ success: true, result: mockHost.lassoRect }),
       deleteLassoElements: () => mockDeleteLasso(),
+      getCurrentFilePath: async () => ({ success: true, result: '/Note/test.note' }),
+      getCurrentPageNum: async () => ({ success: true, result: 0 }),
     },
     PluginNoteAPI: {
       insertText: (box: unknown) => mockInsertText(box),
       modifyLassoText: (box: unknown) => mockModifyLassoText(box),
     },
-    PluginFileAPI: { getLastElement: async () => ({ success: true, result: mockHost.lastElement }) },
+    PluginFileAPI: {
+      getLastElement: async () => ({ success: true, result: mockHost.lastElement }),
+      getElements: async () => (mockHost.pageElements ? { success: true, result: mockHost.pageElements } : { success: false }),
+    },
     // Portrait A5X: EMR x runs down the page, roughly 8.45 EMR units per pixel.
     PointUtils: { emrPoint2Android: (p: { x: number; y: number }) => ({ x: p.y / 8.45, y: p.x / 8.45 }) },
     FileUtils: {
@@ -140,6 +147,7 @@ beforeEach(() => {
   mockHost.lassoElements = [];
   mockHost.recognized = '';
   mockHost.lastElement = null;
+  mockHost.pageElements = null;
   setSettings({ ...DEFAULT_SETTINGS });
 });
 
@@ -253,6 +261,31 @@ describe('App', () => {
     await search(r, 'John 3:16');
     await press(r, 'Insert into note');
     expect(lastInsert().textRect.top).toBeGreaterThan(1100);
+  });
+
+  test('below my writing ignores erased items: only what is still on the page counts', async () => {
+    // getLastElement still reports an erased stroke near the bottom of the page...
+    const erased = [{ x: 14000, y: 3000 }];
+    mockHost.lastElement = { type: 0, numInPage: 9, stroke: { points: { size: async () => 1, getRange: async () => erased } } };
+    // ...but the live page only has a text box near the top.
+    mockHost.pageElements = [
+      { type: 500, numInPage: 2, textBox: { textRect: { left: 98, top: 150, right: 1306, bottom: 400 } } },
+      { type: 500, numInPage: 1, textBox: { textRect: { left: 98, top: 900, right: 1306, bottom: 1000 } } },
+    ];
+    const r = await renderApp();
+    await search(r, 'John 3:16');
+    await press(r, 'Insert into note');
+    expect(lastInsert().textRect.top).toBeGreaterThan(400);
+    expect(lastInsert().textRect.top).toBeLessThan(460);
+  });
+
+  test('below my writing on a page whose items were all erased goes near the top', async () => {
+    mockHost.lastElement = { type: 500, numInPage: 4, textBox: { textRect: { left: 98, top: 1200, right: 1306, bottom: 1500 } } };
+    mockHost.pageElements = [];
+    const r = await renderApp();
+    await search(r, 'John 3:16');
+    await press(r, 'Insert into note');
+    expect(lastInsert().textRect.top).toBe(Math.round(1872 * 0.08));
   });
 
   test('below my writing warns when the page is nearly full', async () => {
