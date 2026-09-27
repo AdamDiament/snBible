@@ -1,6 +1,8 @@
 import { PluginCommAPI, PluginManager, PluginNoteAPI } from 'sn-plugin-lib';
 import type { Settings } from './format';
+import type { LassoTextBox, Rect } from './lasso';
 import { DEFAULT_PAGE, layoutTextBox, Size } from './layout';
+import { lastWritingBottom } from './pageContent';
 
 // sn-plugin-lib types insertText/getPageDisplaySize as Promise<Object> and doesn't export
 // APIResponse from its root, so describe the documented { success, result, error } shape here.
@@ -25,10 +27,10 @@ export async function pageSize(): Promise<Size> {
 
 export type InsertOutcome = { ok: true } | { ok: false; error: string };
 
-export async function insertPassage(text: string, s: Settings): Promise<InsertOutcome> {
-  const { textRect, fontSize } = layoutTextBox(text, await pageSize(), s);
+type FrameFields = { textRect: Rect; fontSize: number };
 
-  const textBox = {
+function textBoxFields(text: string, s: Settings, { textRect, fontSize }: FrameFields) {
+  return {
     textContentFull: text,
     textRect,
     fontSize,
@@ -41,21 +43,57 @@ export async function insertPassage(text: string, s: Settings): Promise<InsertOu
     textFrameStyle: 0,
     textEditable: 0,
   };
+}
 
-  const insert = async () => (await PluginNoteAPI.insertText(textBox)) as ApiResult<boolean> | null | undefined;
-  let res = await insert();
-
-  // 1501 = write permission missing. Ask once, then retry.
+/** Run a write, asking for FILE:WRITE once if the note refuses with 1501. */
+async function withWritePermission(call: () => Promise<unknown>): Promise<InsertOutcome> {
+  let res = (await call()) as ApiResult<boolean> | null | undefined;
   if (!res?.success && res?.error?.code === 1501) {
     const perm = 'plugin.permission.FILE:WRITE';
     const granted = await PluginManager.requestPermission(perm, 'Super Bible needs permission to add the passage to your note.');
-    if (granted === 1 || granted === 2) { res = await insert(); }
+    if (granted === 1 || granted === 2) {
+      res = (await call()) as ApiResult<boolean> | null | undefined;
+    }
   }
-
   if (!res?.success || res.result !== true) {
     return { ok: false, error: res?.error?.message || 'The note did not accept the text box. Make sure a note page is open.' };
   }
   return { ok: true };
+}
+
+/** Insert where the placement setting says: below the last writing, at the top, or centred. */
+export async function insertPassage(text: string, s: Settings): Promise<InsertOutcome> {
+  const page = await pageSize();
+  const below = s.placement === 'below' ? await lastWritingBottom(page) : null;
+  const frame = layoutTextBox(text, page, s, { below });
+  return withWritePermission(() => PluginNoteAPI.insertText(textBoxFields(text, s, frame)));
+}
+
+/**
+ * Insert at the top of a lassoed handwritten reference. With `replace`, the handwriting is
+ * deleted first, while the lasso is still active (inserting may clear the selection).
+ */
+export async function insertAtLasso(text: string, s: Settings, rect: Rect, replace: boolean): Promise<InsertOutcome> {
+  const page = await pageSize();
+  let removed = false;
+  if (replace) {
+    const del = (await PluginCommAPI.deleteLassoElements()) as ApiResult<boolean> | null | undefined;
+    removed = !!del?.success;
+  }
+  const frame = layoutTextBox(text, page, s, { top: rect.top });
+  const res = await withWritePermission(() => PluginNoteAPI.insertText(textBoxFields(text, s, frame)));
+  if (!res.ok && removed) {
+    return { ok: false, error: `${res.error} Your handwriting was removed; use Undo in the note to bring it back.` };
+  }
+  return res;
+}
+
+/** Replace the text of a lassoed Super Bible box, keeping its position and width. */
+export async function updateLassoPassage(text: string, s: Settings, box: LassoTextBox): Promise<InsertOutcome> {
+  const r = box.textRect;
+  const frame = layoutTextBox(text, await pageSize(), s, { top: r.top, left: r.left, right: r.right });
+  const fields = { ...textBoxFields(text, s, frame), ...(box.fontPath ? { fontPath: box.fontPath } : {}) };
+  return withWritePermission(() => PluginNoteAPI.modifyLassoText(fields));
 }
 
 /**
