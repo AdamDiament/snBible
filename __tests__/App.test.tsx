@@ -126,6 +126,17 @@ describe('App', () => {
     expect(allText(r)).toContain('That passage is more than 30 verses');
   });
 
+  test('spaced list and white background reach insertText', async () => {
+    const r = await renderApp();
+    await search(r, 'John 3:16-17');
+    await act(async () => r.root.find(n => n.props.label === 'Layout' && typeof n.props.onChange === 'function').props.onChange('spaced'));
+    await act(async () => r.root.find(n => n.props.label === 'White background (test)' && typeof n.props.onChange === 'function').props.onChange(true));
+    await press(r, 'Insert into note');
+    const box = mockInsertText.mock.calls[0][0] as { textContentFull: string; textFrameFillColor?: number };
+    expect(box.textContentFull).toContain('\n\n16 For God so loved');
+    expect(box.textFrameFillColor).toBe(255);
+  });
+
   test('inserting finishes even though closePluginView never settles', async () => {
     const r = await renderApp();
     await search(r, 'John 3:16');

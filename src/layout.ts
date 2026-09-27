@@ -54,3 +54,19 @@ export function layoutTextBox(text: string, page: Size, s: Pick<Settings, 'textS
     overflow: wanted > maxHeight,
   };
 }
+
+/**
+ * Frame fields for insertText.
+ *
+ * The documented values are textFrameStyle 0 (none) and 3 (stroke). A background fill
+ * isn't documented, but sn-plugin-lib's native TextKey constants describe
+ * 0=fill, 1=stroke, 2=fill+stroke and a textFrameFillColor (0 black … 255 white), and
+ * insertText passes extra fields through to the note app untouched. So the background
+ * option sends those and relies on the device to confirm whether the host honours them.
+ */
+export function textFrame(s: Pick<Settings, 'border' | 'background'>): Record<string, number> {
+  if (!s.background) {
+    return { textFrameStyle: s.border ? 3 : 0 };
+  }
+  return { textFrameStyle: s.border ? 2 : 0, textFrameFillColor: 255, textFrameStrokeColor: 0 };
+}

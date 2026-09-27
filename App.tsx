@@ -481,7 +481,8 @@ function PreviewScreen(props: {
           onChange={v => onChange({ layout: v })}
           options={[
             ['paragraph', 'Paragraph'],
-            ['lines', 'One verse per line'],
+            ['lines', 'One per line'],
+            ['spaced', 'Spaced list'],
           ]}
         />
         <Choice
@@ -517,6 +518,7 @@ function PreviewScreen(props: {
           <Toggle label="Add (BSB)" value={s.includeTranslation} onChange={v => onChange({ includeTranslation: v })} />
           <Toggle label="Bold" value={s.bold} onChange={v => onChange({ bold: v })} />
           <Toggle label="Border" value={s.border} onChange={v => onChange({ border: v })} />
+          <Toggle label="White background (test)" value={s.background} onChange={v => onChange({ background: v })} />
         </View>
         <Text style={st.hint}>
           After inserting, lasso the text box to move or resize it. Text boxes go on the main layer.

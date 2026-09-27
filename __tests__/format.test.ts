@@ -34,6 +34,15 @@ describe('buildText', () => {
     );
   });
 
+  test('spaced list: a blank line between verses and after the reference, like the verse list', () => {
+    expect(build(rows, 'John 3:16–17', { layout: 'spaced' })).toBe(
+      'John 3:16–17 (BSB)\n\n16 For God so loved the world…\n\n17 For God did not send His Son…',
+    );
+    expect(build(rows, 'John 3:16–17', { layout: 'spaced', reference: 'bottom' })).toBe(
+      '16 For God so loved the world…\n\n17 For God did not send His Son…\n\n— John 3:16–17 (BSB)',
+    );
+  });
+
   test('reference below, without translation', () => {
     expect(build(rows.slice(0, 1), 'John 3:16', { reference: 'bottom', includeTranslation: false })).toBe(
       '16 For God so loved the world…\n— John 3:16',

@@ -1,4 +1,4 @@
-import { DEFAULT_PAGE, estimateHeight, layoutTextBox } from '../src/layout';
+import { DEFAULT_PAGE, estimateHeight, layoutTextBox, textFrame } from '../src/layout';
 
 const MANTA = { width: 1920, height: 2560 };
 const short = 'John 3:16 (BSB)\n16 For God so loved the world that He gave His one and only Son…';
@@ -53,5 +53,25 @@ describe('estimateHeight', () => {
     const one = estimateHeight('a', 1000, 30);
     expect(estimateHeight('a\nb\nc', 1000, 30)).toBeGreaterThan(one);
     expect(estimateHeight('x'.repeat(1000), 1000, 30)).toBeGreaterThan(one);
+  });
+});
+
+describe('textFrame', () => {
+  test('documented values without a background', () => {
+    expect(textFrame({ border: false, background: false })).toEqual({ textFrameStyle: 0 });
+    expect(textFrame({ border: true, background: false })).toEqual({ textFrameStyle: 3 });
+  });
+
+  test('background sends a white fill, with or without the border', () => {
+    expect(textFrame({ border: false, background: true })).toEqual({ textFrameStyle: 0, textFrameFillColor: 255, textFrameStrokeColor: 0 });
+    expect(textFrame({ border: true, background: true })).toEqual({ textFrameStyle: 2, textFrameFillColor: 255, textFrameStrokeColor: 0 });
+  });
+});
+
+describe('spaced layout height', () => {
+  test('blank lines between verses make the box taller', () => {
+    const lines = 'a\nb\nc';
+    const spaced = 'a\n\nb\n\nc';
+    expect(estimateHeight(spaced, 1000, 30)).toBeGreaterThan(estimateHeight(lines, 1000, 30));
   });
 });

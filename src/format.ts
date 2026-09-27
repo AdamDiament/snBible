@@ -2,12 +2,13 @@ import type { VerseRow } from './bibleSource';
 
 export type Settings = {
   verseNumbers: 'plain' | 'superscript' | 'off';
-  layout: 'paragraph' | 'lines';
+  layout: 'paragraph' | 'lines' | 'spaced'; // spaced: one verse per line with a blank line between, like the verse list
   reference: 'top' | 'bottom' | 'off';
   includeTranslation: boolean; // append "(BSB)" to the reference
   textSize: 'small' | 'medium' | 'large';
   bold: boolean;
   border: boolean;
+  background: boolean; // white fill behind the text (experimental, see layout.ts textFrame)
   placement: 'top' | 'middle';
 };
 
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: 'medium',
   bold: false,
   border: false,
+  background: false,
   placement: 'top',
 };
 
@@ -53,10 +55,11 @@ export function buildText(rows: VerseRow[], label: string, s: Settings): string 
     return marker(r, showChapter, s.verseNumbers) + r.text;
   });
 
-  const body = s.layout === 'lines' ? pieces.join('\n') : pieces.join(' ');
+  const gap = s.layout === 'spaced' ? '\n\n' : '\n';
+  const body = s.layout === 'paragraph' ? pieces.join(' ') : pieces.join(gap);
   const ref = s.includeTranslation ? `${label} (BSB)` : label;
 
-  if (s.reference === 'top') { return `${ref}\n${body}`; }
-  if (s.reference === 'bottom') { return `${body}\n— ${ref}`; }
+  if (s.reference === 'top') { return `${ref}${gap}${body}`; }
+  if (s.reference === 'bottom') { return `${body}${gap}— ${ref}`; }
   return body;
 }

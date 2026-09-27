@@ -76,6 +76,8 @@ Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all wor
 - Text boxes can only go into NOTE files (not PDFs/EPUBs), and always land on the main layer. Lasso the box afterwards to move or resize it.
 - The plugin asks for write permission only if the note refuses the insert without it (error 1501).
 - Verses the BSB omits (e.g. Matthew 17:21) appear greyed out in the list and are skipped when inserting a range.
+- **Layouts:** Paragraph, One per line, or Spaced list (a blank line between verses, like the verse picker).
+- **White background (test):** an experimental option that asks for a white fill so the box covers the template lines. Fills aren't in the public docs. sn-plugin-lib's native constants describe `textFrameStyle` 0=fill, 1=stroke, 2=fill+stroke and a `textFrameFillColor` (0–255), and `insertText` passes these through to the note app, so it may or may not work. See `textFrame` in `src/layout.ts`.
 - **Limit: 30 verses per insert.** That's about one full page at Small text (roughly 22 at Medium and 14 at Large), and it covers 69% of whole chapters. The preview warns before inserting if the passage won't fit on one page at the chosen size.
 - **Tap freeze (fixed in 1.1.0).** The host keeps the plugin mounted while it's hidden. RN's ScrollView ignores taps on its children while it thinks a fling is still running or the keyboard is open, and hiding the plugin mid-scroll could leave it thinking that for good. Grids then stopped responding while buttons outside them still worked. `SafeScrollView` always passes taps through to buttons, remounts if a fling never finishes, and remounts every time the plugin is shown again.
 - To release an update, raise `versionCode`/`versionName` in `PluginConfig.json` (and `version` in `package.json`), and keep `pluginID` unchanged.
@@ -101,6 +103,8 @@ These can only be confirmed on a Supernote. Please report results in an issue.
 - [ ] The en dash, curly quotes and em dash in references and text render.
 - [ ] The UI is readable on e-ink: no ghosting, and tap targets are big enough. There are deliberately no spinners or animations.
 - [ ] The text box can be lassoed and moved after inserting.
+- [ ] Spaced list inserts with a blank line between verses.
+- [ ] White background (test): does the box hide the template lines? Try it with Border on and off. Also say whether Border (without background) draws a border; that shows which `textFrameStyle` numbering the host really uses.
 - [ ] The button does not appear in DOC/PDF (it is registered for NOTE only).
 
 ## Licence

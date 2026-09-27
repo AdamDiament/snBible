@@ -1,6 +1,6 @@
 import { PluginCommAPI, PluginManager, PluginNoteAPI } from 'sn-plugin-lib';
 import type { Settings } from './format';
-import { DEFAULT_PAGE, layoutTextBox, Size } from './layout';
+import { DEFAULT_PAGE, layoutTextBox, Size, textFrame } from './layout';
 
 // sn-plugin-lib types insertText/getPageDisplaySize as Promise<Object> and doesn't export
 // APIResponse from its root, so describe the documented { success, result, error } shape here.
@@ -36,7 +36,7 @@ export async function insertPassage(text: string, s: Settings): Promise<InsertOu
     textBold: s.bold ? 1 : 0,
     textItalics: 0,
     textFrameWidthType: 0, // fixed width, so the passage wraps inside the page margins
-    textFrameStyle: s.border ? 3 : 0,
+    ...textFrame(s),
     textEditable: 0,
   };
 
