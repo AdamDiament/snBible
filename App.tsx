@@ -1,17 +1,24 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StatusBar, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { PluginManager } from 'sn-plugin-lib';
 import { BOOKS, Book, findBook } from './src/books';
 import { formatSpans, parseReference, Span } from './src/reference';
 import { getChapter, hasOfflineText, resolveSpans, VerseRow } from './src/bibleSource';
+import { LASSO_BUTTON, setButtonHandler } from './src/buttons';
 import { buildText, getSettings, setSettings, Settings } from './src/format';
-import { closePanel, insertPassage, pageSize } from './src/insert';
-import { DEFAULT_PAGE, layoutTextBox, Size } from './src/layout';
+import { closePanel, insertAtLasso, insertPassage, pageSize, updateLassoPassage } from './src/insert';
+import { LassoTextBox, readLasso, Rect } from './src/lasso';
+import { Anchor, DEFAULT_PAGE, layoutTextBox, Size } from './src/layout';
+import { lastWritingBottom } from './src/pageContent';
 import { MAX_VERSES, Selection, selectionRange, selectionStatus, tapVerse } from './src/selection';
+import { loadStored, pushRecent, saveStored } from './src/store';
 import { Button, C, Choice, T, Toggle } from './src/ui/components';
 import { ResumeKey, SafeScrollView } from './src/ui/SafeScrollView';
 
 type Screen = 'books' | 'chapters' | 'verses' | 'preview';
+
+/** Set when opened from the lasso toolbar: look up lassoed handwriting, or update a lassoed text box. */
+type LassoMode = { kind: 'lookup'; rect: Rect; replace: boolean } | { kind: 'edit'; box: LassoTextBox } | null;
 
 // Host lifecycle states (see registerPluginLifeListener in the Supernote docs).
 const LIFE_START = 2;
@@ -27,7 +34,10 @@ function App(): React.JSX.Element {
   const [previewSpans, setPreviewSpans] = useState<Span[]>([]);
   const [rows, setRows] = useState<VerseRow[]>([]);
   const [settings, setLocalSettings] = useState<Settings>(getSettings());
+  const [recents, setRecents] = useState<string[]>([]);
   const [page, setPage] = useState<Size | null>(null);
+  const [below, setBelow] = useState<number | null>(null);
+  const [lasso, setLasso] = useState<LassoMode>(null);
 
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,12 +52,28 @@ function App(): React.JSX.Element {
     const next = { ...settings, ...patch };
     setLocalSettings(next);
     setSettings(next);
+    saveStored({ settings: next, recents });
   };
 
   const dismissKeyboard = () => {
     inputRef.current?.blur();
     Keyboard.dismiss();
   };
+
+  // Saved settings and recent passages.
+  useEffect(() => {
+    let live = true;
+    loadStored().then(st => {
+      if (live && st) {
+        setLocalSettings(st.settings);
+        setSettings(st.settings);
+        setRecents(st.recents);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // The host keeps this component mounted while the plugin is hidden, so clear any
   // keyboard/scroll state that went stale while we were away (see SafeScrollView).
@@ -113,6 +139,26 @@ function App(): React.JSX.Element {
     }
   }, []);
 
+  /**
+   * Show parsed spans: preview them, with the picker synced so Back lands on that chapter.
+   * With `chapterOpensList`, a bare whole chapter ("Ps 23") opens its verse list instead.
+   */
+  const openSpans = useCallback(
+    async (spans: Span[], chapterOpensList: boolean) => {
+      const first = spans[0];
+      const oneChapter = spans.length === 1 && first.startChapter === first.endChapter;
+      if (chapterOpensList && oneChapter && first.startVerse === null) {
+        openChapter(first.book, first.startChapter);
+        return;
+      }
+      setBook(first.book);
+      setChapter(first.startChapter);
+      setSel(oneChapter && first.startVerse !== null ? { anchor: first.startVerse, other: first.endVerse, clamped: false } : null);
+      await showPreview(spans, { book: first.book, chapter: first.startChapter });
+    },
+    [openChapter, showPreview],
+  );
+
   const goFromQuery = async () => {
     dismissKeyboard();
     const q = query.trim();
@@ -130,19 +176,53 @@ function App(): React.JSX.Element {
       setError(parsed.error);
       return;
     }
-    const first = parsed.spans[0];
-    const oneChapter = parsed.spans.length === 1 && first.startChapter === first.endChapter;
-    // A whole chapter ("Ps 23") opens its verse list to pick from, like tapping the chapter number.
-    if (oneChapter && first.startVerse === null) {
-      openChapter(first.book, first.startChapter);
+    await openSpans(parsed.spans, true);
+  };
+
+  const openRecent = (label: string) => {
+    const parsed = parseReference(label);
+    if (parsed.ok) { openSpans(parsed.spans, false); }
+    else { setError(parsed.error); }
+  };
+
+  // ---- lasso toolbar ------------------------------------------------------
+
+  const startFromLasso = async () => {
+    dismissKeyboard();
+    setError(null);
+    setBusy(true);
+    const ctx = await readLasso(page ?? (await pageSize()));
+    setBusy(false);
+    if (ctx.kind === 'error') {
+      setLasso(null);
+      setError(ctx.message);
       return;
     }
-    // Sync the picker with the typed reference so Back lands on that chapter with it selected.
-    setBook(first.book);
-    setChapter(first.startChapter);
-    setSel(oneChapter && first.startVerse !== null ? { anchor: first.startVerse, other: first.endVerse, clamped: false } : null);
-    await showPreview(parsed.spans, { book: first.book, chapter: first.startChapter });
+    if (ctx.kind === 'edit') {
+      setLasso({ kind: 'edit', box: ctx.box });
+      await openSpans(ctx.spans, false);
+      return;
+    }
+    setLasso({ kind: 'lookup', rect: ctx.rect, replace: true });
+    if (ctx.spans) {
+      await openSpans(ctx.spans, false);
+    } else {
+      setQuery(ctx.recognized);
+      setScreen('books');
+      setError(`Read “${ctx.recognized}” from your handwriting but couldn't find a reference in it. Correct it above and press Go.`);
+    }
   };
+
+  // Presses come from index.js via setButtonHandler; the ref keeps the handler current.
+  const onButton = useRef<(id: number) => void>(() => {});
+  onButton.current = id => {
+    if (id === LASSO_BUTTON) { startFromLasso(); }
+    else { setLasso(null); }
+  };
+  useEffect(() => {
+    setButtonHandler(id => onButton.current(id));
+    return () => setButtonHandler(null);
+  }, []);
 
   // ---- verse selection --------------------------------------------------
 
@@ -160,7 +240,15 @@ function App(): React.JSX.Element {
 
   const label = useMemo(() => formatSpans(previewSpans), [previewSpans]);
   const output = useMemo(() => buildText(rows, label, settings), [rows, label, settings]);
-  const overflow = useMemo(() => layoutTextBox(output, page ?? DEFAULT_PAGE, settings).overflow, [output, page, settings]);
+  const fit = useMemo(() => {
+    const at: Anchor =
+      lasso?.kind === 'lookup'
+        ? { top: lasso.rect.top }
+        : lasso?.kind === 'edit'
+          ? { top: lasso.box.textRect.top, left: lasso.box.textRect.left, right: lasso.box.textRect.right }
+          : { below };
+    return layoutTextBox(output, page ?? DEFAULT_PAGE, settings, at);
+  }, [output, page, settings, lasso, below]);
 
   useEffect(() => {
     if (screen === 'preview' && !page) {
@@ -168,12 +256,38 @@ function App(): React.JSX.Element {
     }
   }, [screen, page]);
 
+  // Where "below my writing" would land, for the preview's room warning.
+  useEffect(() => {
+    if (screen !== 'preview' || !page || settings.placement !== 'below' || lasso) {
+      setBelow(null);
+      return;
+    }
+    let live = true;
+    lastWritingBottom(page).then(b => {
+      if (live) { setBelow(b); }
+    });
+    return () => {
+      live = false;
+    };
+  }, [screen, page, settings.placement, lasso]);
+
+  const roomWarning = fit.room || fit.overflow
+    ? null
+    : lasso
+      ? "There isn't room for all of it there, so it will be moved up the page and may overlap your writing."
+      : "There isn't room below your writing on this page, so it will go at the bottom and may overlap.";
+
   const doInsert = async () => {
     setBusy(true);
     setError(null);
     let inserted = false;
     try {
-      const res = await insertPassage(output, settings);
+      const res =
+        lasso?.kind === 'edit'
+          ? await updateLassoPassage(output, settings, lasso.box)
+          : lasso?.kind === 'lookup'
+            ? await insertAtLasso(output, settings, lasso.rect, lasso.replace)
+            : await insertPassage(output, settings);
       if (res.ok) { inserted = true; }
       else { setError(res.error); }
     } catch (e) {
@@ -182,6 +296,10 @@ function App(): React.JSX.Element {
       setBusy(false);
     }
     if (inserted) {
+      const nextRecents = pushRecent(recents, label);
+      setRecents(nextRecents);
+      saveStored({ settings, recents: nextRecents });
+      setLasso(null);
       // Leave the picker on the same chapter for the next insertion.
       setSel(null);
       setScreen(book && verses ? 'verses' : 'books');
@@ -228,6 +346,18 @@ function App(): React.JSX.Element {
           </View>
         </View>
 
+        {lasso ? (
+          <View style={st.lassoBar}>
+            <Text style={st.lassoText}>
+              {lasso.kind === 'edit' ? 'Updating the lassoed text box.' : 'From your lassoed handwriting: the passage goes where you lassoed.'}
+            </Text>
+            {lasso.kind === 'lookup' ? (
+              <Toggle label="Replace handwriting" value={lasso.replace} onChange={v => setLasso({ ...lasso, replace: v })} />
+            ) : null}
+            <Button label="Cancel" kind="quiet" onPress={() => setLasso(null)} />
+          </View>
+        ) : null}
+
         {/* Breadcrumb */}
         <View style={st.crumbs}>
           {screen !== 'books' ? <Button label="‹ Back" kind="quiet" onPress={back} style={st.backBtn} /> : null}
@@ -259,7 +389,7 @@ function App(): React.JSX.Element {
         ) : null}
         {busy ? <Text style={st.loading}>Loading…</Text> : null}
 
-        {screen === 'books' ? <BooksScreen onPick={openBook} /> : null}
+        {screen === 'books' ? <BooksScreen onPick={openBook} recents={recents} onRecent={openRecent} /> : null}
         {screen === 'chapters' && book ? <ChaptersScreen book={book} onPick={ch => openChapter(book, ch)} /> : null}
         {screen === 'verses' && book ? (
           <VersesScreen
@@ -280,7 +410,10 @@ function App(): React.JSX.Element {
             label={label}
             output={output}
             verseCount={rows.length}
-            overflow={overflow}
+            overflow={fit.overflow}
+            roomWarning={roomWarning}
+            placementNote={lasso?.kind === 'edit' ? 'The text box stays where it is.' : lasso ? 'Placed where you lassoed.' : null}
+            insertLabel={lasso?.kind === 'edit' ? 'Update text box' : lasso ? 'Insert here' : 'Insert into note'}
             settings={settings}
             onChange={updateSettings}
             onInsert={doInsert}
@@ -296,13 +429,23 @@ function App(): React.JSX.Element {
 // Books
 // ======================================================================
 
-function BooksScreen({ onPick }: { onPick: (b: Book) => void }) {
+function BooksScreen({ onPick, recents, onRecent }: { onPick: (b: Book) => void; recents: string[]; onRecent: (label: string) => void }) {
   const ot = BOOKS.filter(b => b.testament === 'OT');
   const nt = BOOKS.filter(b => b.testament === 'NT');
   return (
     <SafeScrollView style={st.flex} contentContainerStyle={st.pad}>
       {!hasOfflineText() ? (
         <Text style={st.hint}>Offline text isn't bundled in this build, so chapters will download when opened.</Text>
+      ) : null}
+      {recents.length ? (
+        <>
+          <Text style={st.section}>Recent</Text>
+          <View style={st.grid}>
+            {recents.map(r => (
+              <Cell key={r} label={r} onPress={() => onRecent(r)} width="50%" />
+            ))}
+          </View>
+        </>
       ) : null}
       <Text style={st.section}>Old Testament</Text>
       <View style={st.grid}>
@@ -440,12 +583,18 @@ function PreviewScreen(props: {
   output: string;
   verseCount: number;
   overflow: boolean;
+  roomWarning: string | null;
+  /** Replaces the placement choice when the position is fixed (lasso modes). */
+  placementNote: string | null;
+  insertLabel: string;
   settings: Settings;
   onChange: (p: Partial<Settings>) => void;
   onInsert: () => void;
   busy: boolean;
 }) {
   const { settings: s, onChange } = props;
+  // Keep the passage to about a third of the screen so the options stay in view.
+  const previewMax = Math.round(useWindowDimensions().height * 0.32);
   return (
     <View style={st.flex}>
       <SafeScrollView style={st.flex} contentContainerStyle={st.pad}>
@@ -454,8 +603,10 @@ function PreviewScreen(props: {
           {props.verseCount} verse{props.verseCount === 1 ? '' : 's'} · this is exactly what will go into your note
         </Text>
 
-        <View style={st.paper}>
-          <Text style={[st.scripture, s.bold && st.bold]}>{props.output}</Text>
+        <View style={[st.paper, { maxHeight: previewMax }]}>
+          <SafeScrollView nestedScrollEnabled contentContainerStyle={st.paperInner}>
+            <Text style={[st.scripture, s.bold && st.bold]}>{props.output}</Text>
+          </SafeScrollView>
         </View>
         {props.overflow ? (
           <Text style={st.warn}>
@@ -464,6 +615,7 @@ function PreviewScreen(props: {
               : 'This is too long to fit on one page at this size. Try Small, or fewer verses.'}
           </Text>
         ) : null}
+        {props.roomWarning ? <Text style={st.warn}>{props.roomWarning}</Text> : null}
 
         <Choice
           label="Verse numbers"
@@ -505,15 +657,20 @@ function PreviewScreen(props: {
             ['large', 'Large'],
           ]}
         />
-        <Choice
-          label="Place on page"
-          value={s.placement}
-          onChange={v => onChange({ placement: v })}
-          options={[
-            ['top', 'Near the top'],
-            ['middle', 'Centred'],
-          ]}
-        />
+        {props.placementNote ? (
+          <Text style={st.hint}>{props.placementNote}</Text>
+        ) : (
+          <Choice
+            label="Place on page"
+            value={s.placement}
+            onChange={v => onChange({ placement: v })}
+            options={[
+              ['below', 'Below my writing'],
+              ['top', 'Top'],
+              ['middle', 'Centred'],
+            ]}
+          />
+        )}
         <View style={st.toggles}>
           <Toggle label="Add (BSB)" value={s.includeTranslation} onChange={v => onChange({ includeTranslation: v })} />
           <Toggle label="Bold" value={s.bold} onChange={v => onChange({ bold: v })} />
@@ -525,7 +682,7 @@ function PreviewScreen(props: {
 
       <View style={st.bottomBar}>
         <View style={st.flex} />
-        <Button label={props.busy ? 'Inserting…' : 'Insert into note'} kind="primary" onPress={props.onInsert} disabled={props.busy} style={st.insertBtn} />
+        <Button label={props.busy ? 'Inserting…' : props.insertLabel} kind="primary" onPress={props.onInsert} disabled={props.busy} style={st.insertBtn} />
       </View>
     </View>
   );
@@ -620,7 +777,19 @@ const st = StyleSheet.create({
   barBtn: { marginLeft: 10 },
   insertBtn: { minWidth: 260 },
 
-  paper: { borderWidth: 1, borderColor: C.rule, padding: 20, marginBottom: 24, marginTop: 4 },
+  paper: { borderWidth: 1, borderColor: C.rule, marginBottom: 24, marginTop: 4 },
+  paperInner: { padding: 20 },
+  lassoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    backgroundColor: C.fill,
+    borderBottomWidth: 1,
+    borderBottomColor: C.rule,
+  },
+  lassoText: { flex: 1, minWidth: 240, fontSize: T.small, color: C.ink, marginRight: 12 },
   warn: { fontSize: T.small, color: C.ink, fontWeight: '700', marginTop: -12, marginBottom: 20 },
   scripture: { fontFamily: T.serif, fontSize: T.body, lineHeight: 34, color: C.ink },
   bold: { fontWeight: '700' },

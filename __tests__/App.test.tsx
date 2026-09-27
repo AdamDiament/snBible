@@ -2,24 +2,68 @@ import React from 'react';
 import { ScrollView, Text } from 'react-native';
 import ReactTestRenderer, { act, ReactTestInstance, ReactTestRenderer as Renderer } from 'react-test-renderer';
 import { ResumeKey, SafeScrollView } from '../src/ui/SafeScrollView';
+import { DEFAULT_SETTINGS, setSettings } from '../src/format';
+import { buttonPressed } from '../src/buttons';
 
-let lifeListener: { onMsg: (msg: { state: number }) => void } | null = null;
+// A fake Supernote host: an in-memory plugin folder, a lasso selection, and the page's last element.
+const mockHost = {
+  fs: new Set<string>(),
+  life: null as { onMsg: (msg: { state: number }) => void } | null,
+  lassoElements: [] as unknown[],
+  recognized: '',
+  lassoRect: { left: 100, top: 900, right: 700, bottom: 980 },
+  lastElement: null as unknown,
+};
 const mockClose = jest.fn(() => new Promise<boolean>(() => {})); // never settles, like a hidden host view
 const mockInsertText = jest.fn(async (_box: unknown) => ({ success: true, result: true }));
+const mockModifyLassoText = jest.fn(async (_box: unknown) => ({ success: true, result: true }));
+const mockDeleteLasso = jest.fn(async () => ({ success: true, result: true }));
 
-jest.mock('sn-plugin-lib', () => ({
-  PluginManager: {
-    registerPluginLifeListener: (l: typeof lifeListener) => {
-      lifeListener = l;
-      return { remove: () => (lifeListener = null) };
+jest.mock('sn-plugin-lib', () => {
+  const under = (dir: string) => [...mockHost.fs].filter(p => p.startsWith(`${dir}/`) && !p.slice(dir.length + 1).includes('/'));
+  return {
+    PluginManager: {
+      registerPluginLifeListener: (l: typeof mockHost.life) => {
+        mockHost.life = l;
+        return { remove: () => (mockHost.life = null) };
+      },
+      getPluginDirPath: async () => '/plugins/snBible',
+      closePluginView: () => mockClose(),
+      hasPermission: jest.fn(async () => 1),
+      requestPermission: jest.fn(async () => 1),
     },
-    closePluginView: () => mockClose(),
-    hasPermission: jest.fn(async () => 1),
-    requestPermission: jest.fn(async () => 1),
-  },
-  PluginCommAPI: { getPageDisplaySize: jest.fn(async () => ({ success: true, result: { width: 1404, height: 1872 } })) },
-  PluginNoteAPI: { insertText: (box: unknown) => mockInsertText(box) },
-}));
+    PluginCommAPI: {
+      getPageDisplaySize: jest.fn(async () => ({ success: true, result: { width: 1404, height: 1872 } })),
+      getLassoElements: async () => ({ success: true, result: mockHost.lassoElements }),
+      recognizeElements: async () => ({ success: true, result: mockHost.recognized }),
+      getLassoRect: async () => ({ success: true, result: mockHost.lassoRect }),
+      deleteLassoElements: () => mockDeleteLasso(),
+    },
+    PluginNoteAPI: {
+      insertText: (box: unknown) => mockInsertText(box),
+      modifyLassoText: (box: unknown) => mockModifyLassoText(box),
+    },
+    PluginFileAPI: { getLastElement: async () => ({ success: true, result: mockHost.lastElement }) },
+    // Portrait A5X: EMR x runs down the page, roughly 8.45 EMR units per pixel.
+    PointUtils: { emrPoint2Android: (p: { x: number; y: number }) => ({ x: p.y / 8.45, y: p.x / 8.45 }) },
+    FileUtils: {
+      exists: async (p: string) => mockHost.fs.has(p),
+      listFiles: async (d: string) => under(d).map(path => ({ path, type: 0 })),
+      makeDir: async (p: string) => {
+        mockHost.fs.add(p);
+        return true;
+      },
+      deleteDir: async (d: string) => {
+        for (const p of [...mockHost.fs]) {
+          if (p === d || p.startsWith(`${d}/`)) {
+            mockHost.fs.delete(p);
+          }
+        }
+        return true;
+      },
+    },
+  };
+});
 
 // Imported after the mock so App picks it up.
 import App from '../App';
@@ -64,18 +108,50 @@ async function search(r: Renderer, ref: string) {
   await press(r, 'Go');
 }
 
+const mounted: Renderer[] = [];
+
 async function renderApp(): Promise<Renderer> {
   let r!: Renderer;
   await act(async () => {
     r = ReactTestRenderer.create(<App />);
   });
+  mounted.push(r);
   return r;
 }
+
+afterEach(async () => {
+  await act(async () => {
+    for (const r of mounted.splice(0)) {
+      try {
+        r.unmount();
+      } catch {
+        // already unmounted by the test
+      }
+    }
+  });
+});
 
 beforeEach(() => {
   mockClose.mockClear();
   mockInsertText.mockClear();
+  mockModifyLassoText.mockClear();
+  mockDeleteLasso.mockClear();
+  mockHost.fs.clear();
+  mockHost.lassoElements = [];
+  mockHost.recognized = '';
+  mockHost.lastElement = null;
+  setSettings({ ...DEFAULT_SETTINGS });
 });
+
+type Box = { textContentFull: string; textRect: { left: number; top: number; right: number; bottom: number } };
+const lastInsert = () => mockInsertText.mock.calls[mockInsertText.mock.calls.length - 1][0] as Box;
+
+async function pressLassoButton(r: Renderer) {
+  await act(async () => buttonPressed(101));
+  // Let readLasso's promise chain settle.
+  await act(async () => {});
+  return r;
+}
 
 // ---- App ------------------------------------------------------------------
 
@@ -140,6 +216,136 @@ describe('App', () => {
     expect(box.textContentFull).toContain('\n\n16 For God so loved');
   });
 
+
+  test('settings and recent passages are saved and come back after a restart', async () => {
+    const r = await renderApp();
+    await search(r, 'John 3:16');
+    await act(async () => control(r, 'Layout').props.onChange('spaced'));
+    await press(r, 'Insert into note');
+    expect([...mockHost.fs]).toEqual(
+      expect.arrayContaining(['/plugins/snBible/superbible-state/s.layout=spaced', '/plugins/snBible/superbible-state/r.0=John%203%3A16']),
+    );
+    await act(async () => r.unmount());
+
+    // A fresh process: in-memory settings are back to defaults until the saved state loads.
+    setSettings({ ...DEFAULT_SETTINGS });
+    const again = await renderApp();
+    expect(allText(again)).toContain('Recent');
+    await press(again, 'John 3:16');
+    expect(allText(again)).toContain('this is exactly what will go into your note');
+    expect(control(again, 'Layout').props.value).toBe('spaced');
+  });
+
+  test('below my writing: the passage goes under the last element on the page', async () => {
+    mockHost.lastElement = { type: 500, textBox: { textRect: { left: 98, top: 300, right: 1306, bottom: 700 } } };
+    const r = await renderApp();
+    await search(r, 'John 3:16');
+    expect(control(r, 'Place on page').props.value).toBe('below');
+    await press(r, 'Insert into note');
+    expect(lastInsert().textRect.top).toBeGreaterThan(700);
+    expect(lastInsert().textRect.top).toBeLessThan(760);
+  });
+
+  test('below my writing, with handwriting as the last element (EMR points)', async () => {
+    const points = [{ x: 8450, y: 3000 }, { x: 9295, y: 3100 }]; // lowest ≈ 1100 px
+    mockHost.lastElement = { type: 0, stroke: { points: { size: async () => points.length, getRange: async () => points } } };
+    const r = await renderApp();
+    await search(r, 'John 3:16');
+    await press(r, 'Insert into note');
+    expect(lastInsert().textRect.top).toBeGreaterThan(1100);
+  });
+
+  test('below my writing warns when the page is nearly full', async () => {
+    mockHost.lastElement = { type: 500, textBox: { textRect: { left: 98, top: 1500, right: 1306, bottom: 1780 } } };
+    const r = await renderApp();
+    await search(r, 'John 3:16-18');
+    expect(allText(r)).toContain("There isn't room below your writing on this page");
+  });
+
+  test('lasso handwriting: reads the reference, replaces the handwriting, inserts where it was', async () => {
+    mockHost.lassoElements = [{ type: 0 }];
+    mockHost.recognized = 'Jn 3v16';
+    const r = await pressLassoButton(await renderApp());
+    const text = allText(r);
+    expect(text).toContain('From your lassoed handwriting');
+    expect(text).toContain('John 3:16 (BSB)');
+    expect(text).toContain('Placed where you lassoed.');
+    await press(r, 'Insert here');
+    expect(mockDeleteLasso).toHaveBeenCalledTimes(1);
+    expect(mockDeleteLasso.mock.invocationCallOrder[0]).toBeLessThan(mockInsertText.mock.invocationCallOrder[0]);
+    expect(lastInsert().textRect.top).toBe(900);
+    expect(allText(r)).not.toContain('From your lassoed handwriting');
+  });
+
+  test('lasso handwriting can be kept', async () => {
+    mockHost.lassoElements = [{ type: 0 }];
+    mockHost.recognized = 'Rom 8:28';
+    const r = await pressLassoButton(await renderApp());
+    await act(async () => control(r, 'Replace handwriting').props.onChange(false));
+    await press(r, 'Insert here');
+    expect(mockDeleteLasso).not.toHaveBeenCalled();
+    expect(mockInsertText).toHaveBeenCalledTimes(1);
+  });
+
+  test('unreadable handwriting goes into the search box to correct', async () => {
+    mockHost.lassoElements = [{ type: 0 }];
+    mockHost.recognized = 'Jahn tree';
+    const r = await pressLassoButton(await renderApp());
+    expect(allText(r)).toContain('Read “Jahn tree” from your handwriting');
+    const input = r.root.find(n => n.props.placeholder?.startsWith?.('Type a reference'));
+    expect(input.props.value).toBe('Jahn tree');
+  });
+
+  test('lasso a Super Bible text box: edit the range and update it in place', async () => {
+    const rect = { left: 200, top: 300, right: 1000, bottom: 500 };
+    mockHost.lassoElements = [{ type: 500, textBox: { textContentFull: 'John 3:16 (BSB)\n16 For God so loved the world…', textRect: rect } }];
+    const r = await pressLassoButton(await renderApp());
+    expect(allText(r)).toContain('Updating the lassoed text box.');
+    expect(allText(r)).toContain('The text box stays where it is.');
+    // Extend the range from the verse list, then update.
+    await press(r, '‹ Back');
+    await tapVerse(r, 16);
+    await tapVerse(r, 18);
+    await press(r, 'Preview');
+    await press(r, 'Update text box');
+    expect(mockInsertText).not.toHaveBeenCalled();
+    const box = mockModifyLassoText.mock.calls[0][0] as Box;
+    expect(box.textContentFull.startsWith('John 3:16–18 (BSB)')).toBe(true);
+    expect(box.textRect).toMatchObject({ left: 200, top: 300, right: 1000 });
+  });
+
+  test('a text box without a reference is refused', async () => {
+    mockHost.lassoElements = [{ type: 500, textBox: { textContentFull: 'Shopping: eggs, milk', textRect: { left: 1, top: 1, right: 500, bottom: 90 } } }];
+    const r = await pressLassoButton(await renderApp());
+    expect(allText(r)).toContain("doesn't contain a Bible reference");
+  });
+
+  test('a lasso press that arrives before App has loaded is not lost', async () => {
+    mockHost.lassoElements = [{ type: 0 }];
+    mockHost.recognized = 'Ps 23';
+    buttonPressed(101); // before any render
+    const r = await renderApp();
+    await act(async () => {});
+    expect(allText(r)).toContain('From your lassoed handwriting');
+    expect(allText(r)).toContain('Psalm 23 (BSB)');
+  });
+
+  test('opening from the main toolbar leaves lasso mode', async () => {
+    mockHost.lassoElements = [{ type: 0 }];
+    mockHost.recognized = 'Ps 23';
+    const r = await pressLassoButton(await renderApp());
+    expect(allText(r)).toContain('From your lassoed handwriting');
+    await act(async () => buttonPressed(100));
+    expect(allText(r)).not.toContain('From your lassoed handwriting');
+  });
+
+  test('the preview box is capped so the options stay in view', async () => {
+    const r = await renderApp();
+    await search(r, 'Ps 119:1-30');
+    const capped = r.root.findAll(n => typeof n.props.style === 'object' && [n.props.style].flat().some((s: { maxHeight?: number }) => s?.maxHeight));
+    expect(capped.length).toBeGreaterThan(0);
+  });
+
   test('inserting finishes even though closePluginView never settles', async () => {
     const r = await renderApp();
     await search(r, 'John 3:16');
@@ -156,7 +362,7 @@ describe('App', () => {
   test('the host showing the plugin again remounts the scroll views', async () => {
     const r = await renderApp();
     const before = r.root.findByType(ScrollView);
-    await act(async () => lifeListener?.onMsg({ state: 2 }));
+    await act(async () => mockHost.life?.onMsg({ state: 2 }));
     expect(r.root.findByType(ScrollView)).not.toBe(before);
   });
 });
