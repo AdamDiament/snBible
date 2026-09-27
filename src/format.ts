@@ -7,7 +7,7 @@ export type Settings = {
   includeTranslation: boolean; // append "(BSB)" to the reference
   textSize: 'small' | 'medium' | 'large';
   bold: boolean;
-  placement: 'top' | 'middle';
+  placement: 'below' | 'top' | 'middle'; // below: under the last thing written on the page
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -17,10 +17,10 @@ export const DEFAULT_SETTINGS: Settings = {
   includeTranslation: true,
   textSize: 'medium',
   bold: false,
-  placement: 'top',
+  placement: 'below',
 };
 
-// Settings survive for as long as the plugin process lives (between openings of the panel).
+// In memory for the life of the plugin process; App also saves them with src/store.ts.
 let current: Settings = { ...DEFAULT_SETTINGS };
 export const getSettings = () => current;
 export const setSettings = (s: Settings) => {

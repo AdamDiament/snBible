@@ -63,3 +63,31 @@ describe('spaced layout height', () => {
     expect(estimateHeight(spaced, 1000, 30)).toBeGreaterThan(estimateHeight(lines, 1000, 30));
   });
 });
+
+describe('layoutTextBox anchors', () => {
+  const s = { textSize: 'medium', placement: 'below' } as const;
+
+  test('below: just under the last writing, or near the top on an empty page', () => {
+    const under = layoutTextBox(short, DEFAULT_PAGE, s, { below: 600 });
+    expect(under.textRect.top).toBeGreaterThan(600);
+    expect(under.textRect.top).toBeLessThan(650);
+    expect(under.room).toBe(true);
+    expect(layoutTextBox(short, DEFAULT_PAGE, s, { below: null }).textRect.top).toBe(Math.round(DEFAULT_PAGE.height * 0.08));
+  });
+
+  test('no room below: moved up to fit, and flagged', () => {
+    const full = layoutTextBox(short, DEFAULT_PAGE, s, { below: 1800 });
+    expect(full.room).toBe(false);
+    expect(full.textRect.bottom).toBeLessThanOrEqual(DEFAULT_PAGE.height);
+  });
+
+  test('an exact spot keeps its top, left and right', () => {
+    const r = layoutTextBox(short, DEFAULT_PAGE, s, { top: 333.4, left: 200, right: 1000 }).textRect;
+    expect(r).toMatchObject({ top: 333, left: 200, right: 1000 });
+  });
+
+  test('a box too narrow to read falls back to the page margins', () => {
+    const r = layoutTextBox(short, DEFAULT_PAGE, s, { top: 100, left: 500, right: 540 }).textRect;
+    expect(r.left).toBe(Math.round(DEFAULT_PAGE.width * 0.07));
+  });
+});
