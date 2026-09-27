@@ -34,6 +34,9 @@ export function hasOfflineText(): boolean {
   return getBundled() !== null;
 }
 
+// Online chapters are kept for the session, but only the most recent few, so a long
+// session on the fallback can't grow memory without bound.
+const ONLINE_CACHE_MAX = 40;
 const onlineCache = new Map<string, string[]>();
 
 /** Returns the chapter's verses; index 0 is verse 1. Empty strings mark verses the BSB omits. */
@@ -62,7 +65,7 @@ async function ensureInternet(): Promise<void> {
   }
   const res = await PluginManager.requestPermission(
     perm,
-    'snBible needs internet access to download Bible text, because the offline text was not bundled.',
+    'Super Bible needs internet access to download Bible text, because the offline text was not bundled.',
   );
   if (res !== 1 && res !== 2) {
     throw new Error('Internet access was not allowed. Rebuild the plugin with the offline text (npm run fetch-bsb), or allow internet access.');
@@ -107,6 +110,9 @@ async function fetchChapterOnline(book: Book, chapter: number): Promise<string[]
   for (let i = 0; i < verses.length; i++) { if (verses[i] === undefined) { verses[i] = ''; } }
 
   onlineCache.set(key, verses);
+  if (onlineCache.size > ONLINE_CACHE_MAX) {
+    onlineCache.delete(onlineCache.keys().next().value as string);
+  }
   return verses;
 }
 
@@ -116,8 +122,11 @@ function tidy(s: string): string {
 
 export type VerseRow = { chapter: number; verse: number; text: string };
 
-/** Expand parsed spans to concrete verses, clamped to what exists. */
-export async function resolveSpans(spans: Span[]): Promise<VerseRow[]> {
+/**
+ * Expand parsed spans to concrete verses, clamped to what exists.
+ * Throws once more than `maxVerses` verses are found, before loading any further chapters.
+ */
+export async function resolveSpans(spans: Span[], maxVerses: number = Infinity): Promise<VerseRow[]> {
   const out: VerseRow[] = [];
   const seen = new Set<string>();
   for (const s of spans) {
@@ -134,6 +143,9 @@ export async function resolveSpans(spans: Span[]): Promise<VerseRow[]> {
         seen.add(key);
         const text = verses[v - 1];
         if (text) { out.push({ chapter: ch, verse: v, text }); }
+        if (out.length > maxVerses) {
+          throw new Error(`That passage is more than ${maxVerses} verses. Pick up to ${maxVerses} at a time.`);
+        }
       }
     }
   }
