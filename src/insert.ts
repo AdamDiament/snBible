@@ -1,7 +1,6 @@
 import { PluginCommAPI, PluginManager, PluginNoteAPI } from 'sn-plugin-lib';
 import type { Settings } from './format';
-import { FrameTest, frameTestFields, stackBox } from './frameTest';
-import { DEFAULT_PAGE, layoutTextBox, Size, textFrame } from './layout';
+import { DEFAULT_PAGE, layoutTextBox, Size } from './layout';
 
 // sn-plugin-lib types insertText/getPageDisplaySize as Promise<Object> and doesn't export
 // APIResponse from its root, so describe the documented { success, result, error } shape here.
@@ -26,14 +25,8 @@ export async function pageSize(): Promise<Size> {
 
 export type InsertOutcome = { ok: true } | { ok: false; error: string };
 
-/** `test` (temporary): frame experiment fields, and which slot down the page to use. */
-export async function insertPassage(text: string, s: Settings, test?: { frame: FrameTest; slot: number }): Promise<InsertOutcome> {
-  const page = await pageSize();
-  let layout = layoutTextBox(text, page, s);
-  if (test) {
-    layout = stackBox(layout, page, test.slot);
-  }
-  const { textRect, fontSize } = layout;
+export async function insertPassage(text: string, s: Settings): Promise<InsertOutcome> {
+  const { textRect, fontSize } = layoutTextBox(text, await pageSize(), s);
 
   const textBox = {
     textContentFull: text,
@@ -43,7 +36,9 @@ export async function insertPassage(text: string, s: Settings, test?: { frame: F
     textBold: s.bold ? 1 : 0,
     textItalics: 0,
     textFrameWidthType: 0, // fixed width, so the passage wraps inside the page margins
-    ...(test ? frameTestFields(test.frame) : textFrame(s)),
+    // No frame. Borders and fills aren't usable from plugins yet: the documented stroke (3)
+    // and the SDK's internal fill/stroke values (0-2, with fill colours) all drew nothing on device.
+    textFrameStyle: 0,
     textEditable: 0,
   };
 

@@ -140,24 +140,6 @@ describe('App', () => {
     expect(box.textContentFull).toContain('\n\n16 For God so loved');
   });
 
-  test('frame test labels each insert, sends its fields, and stacks boxes down the page', async () => {
-    const r = await renderApp();
-    await search(r, 'John 3:16');
-    await act(async () => control(r, 'Use frame test for inserts').props.onChange(true));
-    await act(async () => control(r, 'Fill colour (0 black … 255 white)').props.onChange('0'));
-    await act(async () => control(r, 'Text colour').props.onChange('whiteArgb'));
-    await press(r, 'Insert into note');
-    // Back on the John 3 verse list; the frame test stays on for the next insert.
-    await tapVerse(r, 16);
-    await press(r, 'Preview');
-    await press(r, 'Insert into note');
-    type Box = { textContentFull: string; textRect: { top: number }; textFrameStyle: number; textFrameFillColor?: number; textColor?: number };
-    const [a, b] = mockInsertText.mock.calls.map(c => c[0] as Box);
-    expect(a.textContentFull.split('\n')[0]).toBe('[mode 2 · fill 0 · text whiteArgb]');
-    expect(a).toMatchObject({ textFrameStyle: 2, textFrameFillColor: 0, textColor: -1 });
-    expect(b.textRect.top).toBeGreaterThan(a.textRect.top);
-  });
-
   test('inserting finishes even though closePluginView never settles', async () => {
     const r = await renderApp();
     await search(r, 'John 3:16');

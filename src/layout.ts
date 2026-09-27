@@ -54,11 +54,3 @@ export function layoutTextBox(text: string, page: Size, s: Pick<Settings, 'textS
     overflow: wanted > maxHeight,
   };
 }
-
-/**
- * Frame fields for insertText. The docs give 3 for a stroke, but it drew nothing on
- * device; src/frameTest.ts is working out the real values.
- */
-export function textFrame(s: Pick<Settings, 'border'>): Record<string, number> {
-  return { textFrameStyle: s.border ? 3 : 0 };
-}

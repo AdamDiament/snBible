@@ -1,4 +1,4 @@
-import { DEFAULT_PAGE, estimateHeight, layoutTextBox, textFrame } from '../src/layout';
+import { DEFAULT_PAGE, estimateHeight, layoutTextBox } from '../src/layout';
 
 const MANTA = { width: 1920, height: 2560 };
 const short = 'John 3:16 (BSB)\n16 For God so loved the world that He gave His one and only Son…';
@@ -56,40 +56,10 @@ describe('estimateHeight', () => {
   });
 });
 
-describe('textFrame', () => {
-  test('documented values', () => {
-    expect(textFrame({ border: false })).toEqual({ textFrameStyle: 0 });
-    expect(textFrame({ border: true })).toEqual({ textFrameStyle: 3 });
-  });
-});
-
 describe('spaced layout height', () => {
   test('blank lines between verses make the box taller', () => {
     const lines = 'a\nb\nc';
     const spaced = 'a\n\nb\n\nc';
     expect(estimateHeight(spaced, 1000, 30)).toBeGreaterThan(estimateHeight(lines, 1000, 30));
-  });
-});
-
-describe('frame test (temporary)', () => {
-  const { frameTestFields, frameTestLabel, stackBox } = require('../src/frameTest');
-
-  test('fields and label', () => {
-    expect(frameTestFields({ mode: '1', fill: 'none', text: 'default' })).toEqual({ textFrameStyle: 1, textFrameWidth: 3, textFrameStrokeColor: 0 });
-    expect(frameTestFields({ mode: '2', fill: '128', text: 'white255' })).toMatchObject({ textFrameFillColor: 128, textColor: 255 });
-    expect(frameTestLabel({ mode: '0', fill: '200', text: 'whiteArgb' })).toBe('[mode 0 · fill 200 · text whiteArgb]');
-  });
-
-  test('stacks boxes down the page and wraps, keeping integer in-page rects', () => {
-    const base = layoutTextBox(short, DEFAULT_PAGE, { textSize: 'medium', placement: 'top' });
-    const tops = [0, 1, 2].map(i => stackBox(base, DEFAULT_PAGE, i).textRect.top);
-    expect(tops[1]).toBeGreaterThan(tops[0]);
-    expect(tops[2]).toBeGreaterThan(tops[1]);
-    for (let i = 0; i < 40; i++) {
-      const r = stackBox(base, DEFAULT_PAGE, i).textRect;
-      expect(Number.isInteger(r.top) && Number.isInteger(r.bottom)).toBe(true);
-      expect(r.bottom).toBeLessThanOrEqual(DEFAULT_PAGE.height);
-    }
-    expect(stackBox(base, DEFAULT_PAGE, 1000).textRect.top).toBeLessThan(DEFAULT_PAGE.height);
   });
 });

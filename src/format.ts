@@ -7,7 +7,6 @@ export type Settings = {
   includeTranslation: boolean; // append "(BSB)" to the reference
   textSize: 'small' | 'medium' | 'large';
   bold: boolean;
-  border: boolean;
   placement: 'top' | 'middle';
 };
 
@@ -18,7 +17,6 @@ export const DEFAULT_SETTINGS: Settings = {
   includeTranslation: true,
   textSize: 'medium',
   bold: false,
-  border: false,
   placement: 'top',
 };
 
