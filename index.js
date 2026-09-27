@@ -10,7 +10,7 @@ PluginManager.init();
 // Toolbar button in NOTE (text boxes can only be inserted into notes, not DOCs/PDFs).
 PluginManager.registerButton(1, ['NOTE'], {
   id: 100,
-  name: 'snBible',
+  name: 'Super Bible',
   icon: Image.resolveAssetSource(require('./assets/icon/icon.png')).uri,
   showType: 1, // open the plugin UI
 });

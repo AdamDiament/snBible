@@ -1,12 +1,12 @@
-# snBible
+# Super Bible
 
 A Supernote plugin that inserts Berean Standard Bible passages into the current note as a text box.
 
-Tap the **snBible** button in a note's toolbar, then either pick **book → chapter → verses** (tap the first verse, then the last), or type a reference such as `genesis 1:1-5` and press **Go**. The preview shows exactly what will be inserted; adjust verse numbers, layout, reference position, size and placement, then tap **Insert into note**.
+Tap the **Super Bible** button in a note's toolbar, then either pick **book → chapter → verses** (tap the first and last verse, in either order), or type a reference such as `genesis 1:1-5` and press **Go**. Up to 30 verses can be inserted at a time. The preview shows exactly what will be inserted; adjust verse numbers, layout, reference position, size and placement, then tap **Insert into note**.
 
 ## Build and install
 
-This repository is the complete plugin project, generated from the official template (`@supernote-plugin/sn-plugin-template`, React Native **0.79.2**, which must not change) with the snBible source on top.
+This repository is the complete plugin project, generated from the official template (`@supernote-plugin/sn-plugin-template`, React Native **0.79.2**, which must not change) with the plugin source on top. The display name is **Super Bible**; the package name, `pluginKey` and `app.json` name stay `snBible`, and `pluginID` never changes, so new builds install as updates.
 
 You need Node 18+ and `zip`, plus `jq` or `python3`. snBible has no native Android code, so `buildPlugin.sh` only bundles the JavaScript and zips it. JDK 17 and the Android SDK are needed only if you later add a dependency with native code.
 
@@ -36,7 +36,8 @@ The package is written to `build/outputs/snBible.snplg`. Copy it to **MyStyle** 
 | `genesis 1:1-5`, `Gen 1:1–5` | Genesis 1:1–5 |
 | `Jn 3:16`, `first john 1:9`, `I John 4:8`, `Gen. 1:1` | single verses |
 | `Rom 8:38-9:2`, `Isa 52:13-53:12` | ranges across chapters |
-| `Ps 23`, `Gen 1-2` | whole chapters |
+| `Ps 23`, `John 3` | opens that chapter's verse list to pick from |
+| `Gen 1-2` | whole chapters (if 30 verses or fewer) |
 | `John 3:16, 18-21` | several pieces of one chapter |
 | `Jude 3-5`, `Philemon 6`, `Philemon 1:6` | verses in one-chapter books |
 | `deuter 6:4`, `lament 3:22` | any unambiguous prefix of a book name |
@@ -59,8 +60,11 @@ Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all wor
 | `src/reference.ts` | Reference parser and label formatting |
 | `src/bibleSource.ts` | Offline bundle reader and online fallback |
 | `src/format.ts` | Turns verses into the text box string (options live here) |
-| `src/insert.ts` | Sizes and places the text box, calls `PluginNoteAPI.insertText` |
+| `src/selection.ts` | Verse-list selection (either order) and the 30-verse limit |
+| `src/layout.ts` | Text box size and position, and the one-page fit estimate |
+| `src/insert.ts` | Calls `PluginNoteAPI.insertText` and closes the panel |
 | `src/ui/components.tsx` | E-ink buttons, segmented choices and toggles |
+| `src/ui/SafeScrollView.tsx` | ScrollView that can't get stuck ignoring taps (see Notes) |
 | `src/data/bsb.json` | The bundled BSB text |
 | `scripts/fetch-bsb.mjs` | Downloads and converts the BSB text |
 | `PluginConfig.json` | Plugin name, ID, version and permissions |
@@ -72,6 +76,8 @@ Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all wor
 - Text boxes can only go into NOTE files (not PDFs/EPUBs), and always land on the main layer. Lasso the box afterwards to move or resize it.
 - The plugin asks for write permission only if the note refuses the insert without it (error 1501).
 - Verses the BSB omits (e.g. Matthew 17:21) appear greyed out in the list and are skipped when inserting a range.
+- **Limit: 30 verses per insert.** That's about one full page at Small text (roughly 22 at Medium and 14 at Large), and it covers 69% of whole chapters. The preview warns before inserting if the passage won't fit on one page at the chosen size.
+- **Tap freeze (fixed in 1.1.0).** The host keeps the plugin mounted while it's hidden. RN's ScrollView ignores taps on its children while it thinks a fling is still running or the keyboard is open, and hiding the plugin mid-scroll could leave it thinking that for good. Grids then stopped responding while buttons outside them still worked. `SafeScrollView` always passes taps through to buttons, remounts if a fling never finishes, and remounts every time the plugin is shown again.
 - To release an update, raise `versionCode`/`versionName` in `PluginConfig.json` (and `version` in `package.json`), and keep `pluginID` unchanged.
 
 ### Corrections from checking the real SDK (sn-plugin-lib 0.1.65)
@@ -85,11 +91,12 @@ Abbreviations like `Matt`, `Deut`, `Phil`, `Phlm`, `Eccl`, `Song`, `Rev` all wor
 
 These can only be confirmed on a Supernote. Please report results in an issue.
 
-- [ ] The toolbar button appears in NOTE and opens the UI.
+- [ ] The toolbar button appears in NOTE, is named Super Bible, and opens the UI.
+- [ ] No tap freeze after lots of opening and closing: scroll a long grid (Psalms), close the plugin mid-scroll, reopen, and tap a chapter. Also try after typing in the search box.
 - [ ] The plugin opens without a noticeable delay. The ~4 MB of bundled text is evaluated when the book grid first renders. If it's slow, switch `bsb.json` to a compact format (one string per chapter, joined with `\u0001`).
 - [ ] `insertText` works without asking for FILE:WRITE. If it doesn't, check that the 1501 retry path asks for permission and then inserts.
 - [ ] Font size factors (small 0.018, medium 0.022, large 0.027 × page width) look right. Note which model you tested on.
-- [ ] The height estimate is reasonable. Test Psalm 119 as a long passage; it should report that it overflows the page.
+- [ ] The height estimate is reasonable. Try Psalm 119:1–30: the preview should warn that it won't fit on one page at Medium, and the inserted box should roughly match the text.
 - [ ] Superscript verse numbers render in the Supernote font, including cross-chapter markers like `⁸:³⁹`, where the colon isn't superscript.
 - [ ] The en dash, curly quotes and em dash in references and text render.
 - [ ] The UI is readable on e-ink: no ghosting, and tap targets are big enough. There are deliberately no spinners or animations.
